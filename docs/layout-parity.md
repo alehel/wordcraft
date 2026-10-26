@@ -266,6 +266,7 @@ layout suite are pending; this is not a new Word/native-IME acceptance claim.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | trivial | A line set by an inline picture in multiple spacing above single takes the text's leading, (m - 1) x its natural height, below the picture instead of the descent (when larger), and at the foot of a page only the picture has to fit above the bottom margin, as for text. Word for Windows put a 472pt picture in 1.5-spaced 12pt text on the page with 1.7pt to spare and spaced the next line 6.3pt below it; the 64-page document now has 64 pages, not 65 (`layout::tests::a_picture_in_one_and_a_half_spacing_takes_the_texts_leading_and_fits_at_the_page_bottom`) |
 | 2026-10-25 | trivial | Arabic list labels: `arabicAlpha` and `arabicAbjad` draw the 28 Arabic letters (alphabetical and abjad order), doubling past the last letter; Hebrew, Hindi, Thai and Vietnamese still show decimal (`doc::section::tests::arabic_letters_count_in_both_orders`) |
 | 2026-10-24 | trivial | Preserve grapheme edit/wrap boundaries across independently drawn font/style pieces; original emoji regression retained, new mixed-style/bundled-font LTR/bidi controls pending managed validation |
 | 2026-10-24 | trivial | Exact-spacing table contact uses the specified line height in row selection and word skipping; large/small mark regressions in modes 11/12/14/15 (#3977); shape estimates unchanged |
