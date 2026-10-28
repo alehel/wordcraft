@@ -192,6 +192,24 @@ pub fn charset_base_family(family: &str) -> &str {
         .map_or(family, str::trim_end)
 }
 
+/// Whether `substitute` was made to measure like `family` (the same advance widths and line
+/// height), so text drawn in it wraps and paginates as in `family`: Carlito for Calibri, Caladea
+/// for Cambria, Liberation and Croscore fonts for Arial, Times New Roman and Courier New, the
+/// Palatino look-alikes for Palatino Linotype and Book Antiqua, and Arial and Helvetica (drawn to
+/// Helvetica's widths) for one another.
+pub fn metric_compatible(family: &str, substitute: &str) -> bool {
+    const ARIAL: &[&str] = &["arial", "helvetica", "liberation sans", "arimo"];
+    // Not macOS Times or Courier: their advance widths differ from Times New Roman's and
+    // Courier New's.
+    const TIMES: &[&str] = &["times new roman", "liberation serif", "tinos"];
+    const COURIER: &[&str] = &["courier new", "liberation mono", "cousine"];
+    const CALIBRI: &[&str] = &["calibri", "carlito"];
+    const CAMBRIA: &[&str] = &["cambria", "caladea"];
+    const PALATINO: &[&str] = &["palatino linotype", "palatino", "book antiqua", "tex gyre pagella", "p052", "urw palladio l", "palladio"];
+    let (f, s) = (charset_base_family(family.trim()).to_ascii_lowercase(), substitute.trim().to_ascii_lowercase());
+    [ARIAL, TIMES, COURIER, CALIBRI, CAMBRIA, PALATINO].iter().any(|g| g.contains(&f.as_str()) && g.contains(&s.as_str()))
+}
+
 /// Naskh-style Persian/Arabic document fonts (the "B …" family names come from the common
 /// Persian font packs; matched by name only).
 fn is_persian_naskh(f: &str) -> bool {
@@ -475,6 +493,17 @@ mod tests {
         let long = "L".repeat(10_000);
         let _ = resolve(&long, false, false);
         assert!(!resolve_cache().lock().unwrap_or_else(|e| e.into_inner()).1.keys().any(|k| k.0.len() > 1000));
+    }
+
+    #[test]
+    fn metric_compatible_substitutes_are_known() {
+        assert!(metric_compatible("Calibri", "Carlito"));
+        assert!(metric_compatible(" arial ", "Liberation Sans"));
+        assert!(metric_compatible("Arial CE", "Helvetica"));
+        assert!(metric_compatible("Book Antiqua", "TeX Gyre Pagella"));
+        assert!(!metric_compatible("Calibri", "Helvetica Neue"));
+        assert!(!metric_compatible("Open Sans", "Carlito"));
+        assert!(!metric_compatible("Times New Roman", "Times"));
     }
 
     #[test]

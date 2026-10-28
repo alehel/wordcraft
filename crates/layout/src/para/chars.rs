@@ -1,4 +1,4 @@
-use super::{Document, FaceRef, ResolvedChar, SOFT_HYPHEN};
+use super::{Document, FaceRef, OBJ, ResolvedChar, SOFT_HYPHEN};
 
 /// What a piece of text is shaped as: one face, case, script formatting and direction.
 #[derive(Clone, Copy)]
@@ -164,4 +164,37 @@ pub(crate) fn thai_run_face(font: &str, substituted: bool, primary: FaceRef, tex
 /// and punctuation.
 fn thai_or_latin(c: char) -> bool {
     matches!(u32::from(c), 0x0021..=0x024F | 0x0E00..=0x0E7F) && !c.is_whitespace() && !c.is_control() && c != SOFT_HYPHEN
+}
+
+/// The face text set in `font` is drawn in when `font` isn't installed, as layout picks it (a
+/// missing font the document classes as roman is drawn in [`MISSING_ROMAN_FONT`]); `None` when it
+/// is installed. Characters the face lacks are drawn in fallback faces.
+pub fn substitute_face(doc: &Document, font: &str) -> Option<FaceRef> {
+    if font.trim().is_empty() {
+        return None;
+    }
+    let family = lookup_family(doc, font);
+    let r = wordcraft_fonts::word::resolve(family, false, false);
+    (r.substituted || family != font).then_some(r.face)
+}
+
+/// `font` as [`ParaLayout::substituted`](super::ParaLayout::substituted) records it: a hostile
+/// file's font name can be megabytes long, so the first 256 characters. Look names up through
+/// this to match it.
+pub fn reported_font_name(font: &str) -> &str {
+    font.char_indices().nth(256).and_then(|(i, _)| font.get(..i)).unwrap_or(font)
+}
+
+/// Whether `c` draws anything: not whitespace, a control, an object's placeholder or a Unicode
+/// Default_Ignorable_Code_Point (soft hyphen, zero-width spaces and joiners, bidi controls,
+/// variation selectors, Hangul fillers, the BOM, tags…).
+pub fn draws_something(c: char) -> bool {
+    !c.is_whitespace()
+        && !c.is_control()
+        && c != OBJ
+        && !matches!(c,
+            '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}'..='\u{1160}' | '\u{17B4}'..='\u{17B5}' | '\u{180B}'..='\u{180F}'
+            | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{206F}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}'
+            | '\u{FEFF}' | '\u{FFA0}' | '\u{FFF0}'..='\u{FFF8}' | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}')
 }

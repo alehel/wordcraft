@@ -193,6 +193,8 @@ impl WordApp {
             frame_ms: _,
             quit_requested: _,
             autosave: _,
+            // Read from a layout and kept with it: right for whichever window shows that layout.
+            missing_fonts: _,
             zotero: _,
             ctx: _,
             read_aloud_error: _,

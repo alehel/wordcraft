@@ -129,6 +129,7 @@ impl WordApp {
             frame_ms: 0.0,
             quit_requested: false,
             autosave: true,
+            missing_fonts: (std::sync::Weak::new(), Default::default()),
             zotero: zotero::ZoteroLink::default(),
             ctx: None,
             ime_origin: false,
