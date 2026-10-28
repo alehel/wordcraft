@@ -2075,3 +2075,10 @@
 	Start-up	起動
 	Show the Start screen when WordCraft starts	WordCraft の起動時にスタート画面を表示する
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	オン: WordCraft は [ファイル] › [ホーム] で開き、白紙の文書、テンプレート、最近使った文書を表示します。オフ: 白紙の文書を開きます。
+	Font Substitution…	フォントの置換…
+	1 font not installed	1 個のフォントがインストールされていません
+	{count} fonts not installed	{count} 個のフォントがインストールされていません
+	Shown in substitute fonts. Click for details.	代替フォントで表示されています。クリックすると詳細を表示します。
+	Not installed — shown as	未インストール — 表示に使用
+	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} はこのコンピューターにインストールされていないため、テキストは {shown} で表示されています。行の折り返しやページ数が、文書を作成した環境と異なる場合があります。[フォントの追加…] でインストールできます。
+	…and {count} more	…ほか {count} 個

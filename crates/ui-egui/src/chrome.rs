@@ -399,12 +399,13 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 }
                 // Fonts the document uses that aren't installed: they're drawn in other fonts, so
                 // the text can wrap and paginate unlike where the document was made.
-                let missing = app.cached_missing_fonts().to_vec();
-                if !missing.is_empty() {
-                    let label = if missing.len() == 1 {
+                let missing = app.cached_missing_fonts(&l);
+                let count = missing.iter().filter(|f| !f.metric_compatible).count();
+                if count > 0 {
+                    let label = if count == 1 {
                         tl!("1 font not installed").to_string()
                     } else {
-                        crate::i18n::fmt(tl!("{count} fonts not installed"), &[("count", &missing.len().to_string())])
+                        crate::i18n::fmt(tl!("{count} fonts not installed"), &[("count", &count.to_string())])
                     };
                     let (ir, _) = ui.allocate_exact_size(vec2(13.0, 13.0), Sense::hover());
                     icons::paint(ui.painter(), ir, "fontMissing", t.icon, t.accent);
@@ -413,8 +414,13 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                     egui::Popup::menu(&resp).show(|ui| {
                         ui.set_min_width(260.0);
                         ui.label(egui::RichText::new(tl!("Not installed — shown as")).strong());
-                        for (font, shown) in &missing {
-                            ui.label(format!("{font} → {shown}"));
+                        // A hostile file can name thousands of fonts: list the first few.
+                        const SHOWN: usize = 20;
+                        for f in missing.iter().filter(|f| !f.metric_compatible).take(SHOWN) {
+                            ui.label(format!("{} → {}", f.font, f.shown_as.join(", ")));
+                        }
+                        if count > SHOWN {
+                            ui.label(crate::i18n::fmt(tl!("…and {count} more"), &[("count", &(count - SHOWN).to_string())]));
                         }
                         ui.separator();
                         if ui.button(tl!("Add Font…")).clicked() {
@@ -526,17 +532,20 @@ fn small_icon(ui: &mut Ui, icon: &str, tip: &str) -> bool {
 }
 
 impl WordApp {
-    /// Word count, recomputed only when the document changes.
-    /// [`wordcraft_engine::cmd::font::missing_fonts`], computed again only when the document
-    /// or the installed fonts change.
-    pub fn cached_missing_fonts(&mut self) -> &[(String, String)] {
-        let key = (self.session.rev(), wordcraft_fonts::FontDb::global().generation());
-        if self.missing_fonts.0 != key {
-            self.missing_fonts = (key, wordcraft_engine::cmd::font::missing_fonts(&self.session.doc));
+    /// [`wordcraft_engine::cmd::font::missing_fonts`] for `layout`, read again only when the
+    /// document is laid out again (adding or removing a font lays it out again).
+    pub fn cached_missing_fonts(
+        &mut self,
+        layout: &std::sync::Arc<wordcraft_layout::DocLayout>,
+    ) -> std::sync::Arc<Vec<wordcraft_engine::cmd::font::MissingFont>> {
+        if !self.missing_fonts.0.upgrade().is_some_and(|seen| std::sync::Arc::ptr_eq(&seen, layout)) {
+            let found = wordcraft_engine::cmd::font::missing_fonts(layout);
+            self.missing_fonts = (std::sync::Arc::downgrade(layout), std::sync::Arc::new(found));
         }
-        &self.missing_fonts.1
+        self.missing_fonts.1.clone()
     }
 
+    /// Word count, recomputed only when the document changes.
     pub fn cached_word_count(&mut self) -> usize {
         // The count option changes the count without a document change.
         let key = self.session.rev().wrapping_mul(2) | u64::from(self.session.prefs.count_notes);

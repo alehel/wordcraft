@@ -2468,3 +2468,10 @@ preview	Title	Tytuł
 	Typing	Pisanie
 	Search	Wyszukaj
 	Title Bar	Pasek tytułu
+	Font Substitution…	Podstawianie czcionek…
+	1 font not installed	1 czcionka niezainstalowana
+	{count} fonts not installed	Niezainstalowane czcionki: {count}
+	Shown in substitute fonts. Click for details.	Wyświetlane czcionkami zastępczymi. Kliknij, aby zobaczyć szczegóły.
+	Not installed — shown as	Niezainstalowana — wyświetlana jako
+	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	Czcionka {font} nie jest zainstalowana na tym komputerze, więc jej tekst jest wyświetlany czcionką {shown}. Podziały wierszy i liczba stron mogą się różnić od tych, gdzie dokument utworzono. Polecenie Dodaj czcionkę… ją instaluje.
+	…and {count} more	…i {count} więcej

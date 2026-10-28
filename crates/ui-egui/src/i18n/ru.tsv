@@ -2474,3 +2474,10 @@ preview	Title	Пример
 	Level 7	Уровень 7
 	Level 8	Уровень 8
 	Level 9	Уровень 9
+	Font Substitution…	Замена шрифтов…
+	1 font not installed	1 шрифт не установлен
+	{count} fonts not installed	Не установлено шрифтов: {count}
+	Shown in substitute fonts. Click for details.	Отображаются заменяющими шрифтами. Щёлкните для подробностей.
+	Not installed — shown as	Не установлен — отображается как
+	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	Шрифт {font} не установлен на этом компьютере, поэтому его текст отображается шрифтом {shown}. Переносы строк и число страниц могут отличаться от тех, где создан документ. Команда «Добавить шрифт…» устанавливает его.
+	…and {count} more	…и ещё {count}

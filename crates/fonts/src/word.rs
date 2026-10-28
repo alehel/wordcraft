@@ -190,6 +190,22 @@ fn style_name(bold: bool, italic: bool) -> &'static str {
     }
 }
 
+/// Whether `substitute` was made to measure like `family` (the same advance widths and line
+/// height), so text drawn in it wraps and paginates as in `family`: Carlito for Calibri, Caladea
+/// for Cambria, Liberation and Croscore fonts for Arial, Times New Roman and Courier New, and
+/// Arial and Helvetica (drawn to Helvetica's widths) for one another.
+pub fn metric_compatible(family: &str, substitute: &str) -> bool {
+    const ARIAL: &[&str] = &["arial", "helvetica", "liberation sans", "arimo"];
+    // Not macOS Times or Courier: their advance widths differ from Times New Roman's and
+    // Courier New's.
+    const TIMES: &[&str] = &["times new roman", "liberation serif", "tinos"];
+    const COURIER: &[&str] = &["courier new", "liberation mono", "cousine"];
+    const CALIBRI: &[&str] = &["calibri", "carlito"];
+    const CAMBRIA: &[&str] = &["cambria", "caladea"];
+    let (f, s) = (charset_base_family(family.trim()).to_ascii_lowercase(), substitute.trim().to_ascii_lowercase());
+    [ARIAL, TIMES, COURIER, CALIBRI, CAMBRIA].iter().any(|g| g.contains(&f.as_str()) && g.contains(&s.as_str()))
+}
+
 /// Resolve `family` with bold/italic to a face (memoised until user fonts are added or removed,
 /// [`FontDb::generation`]).
 pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
@@ -272,6 +288,15 @@ mod tests {
         // A negative gap adds nothing; the most negative descender doesn't overflow.
         assert_eq!(hhea_line(1000, -300, -50), (1000.0, 300.0));
         assert_eq!(hhea_line(1000, i16::MIN, 0), (1000.0, 32768.0));
+    }
+
+    #[test]
+    fn metric_compatible_substitutes_are_known() {
+        assert!(metric_compatible("Calibri", "Carlito"));
+        assert!(metric_compatible(" arial ", "Liberation Sans"));
+        assert!(metric_compatible("Arial CE", "Helvetica"));
+        assert!(!metric_compatible("Calibri", "Helvetica Neue"));
+        assert!(!metric_compatible("Open Sans", "Carlito"));
     }
 
     #[test]

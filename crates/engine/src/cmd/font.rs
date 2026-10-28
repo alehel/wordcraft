@@ -1,5 +1,6 @@
 //! Fonts the user adds without rebuilding (#582): `font.add`, `font.list`, `font.remove`; and
-//! the document's fonts that aren't installed, with the fonts shown instead (`font.missing`).
+//! the fonts the document's text asks for that aren't installed, with the fonts drawn instead
+//! (`font.missing`).
 //!
 //! An added font joins the process-wide font database on top of the bundled and system fonts
 //! (never replacing a face already there), so it shows in the font lists, lays out, renders and
@@ -7,10 +8,8 @@
 //! folder (desktop); without one it lasts for the session (the web shell stores it itself).
 
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
-
-use wordcraft_doc::{Document, StoryRef};
 use wordcraft_fonts::{FontDb, UserFont};
+use wordcraft_layout::DocLayout;
 
 use crate::cmd::insert::base64_decode;
 use crate::{CmdError, CmdResult, CommandSpec, Session, p};
@@ -22,7 +21,9 @@ pub fn specs() -> Vec<CommandSpec> {
             .pure(),
         CommandSpec::new("font.list", "Added Fonts", "Home › Font", list).params(r#"{"all"?: bool (also every available family)}"#).pure(),
         CommandSpec::new("font.remove", "Remove Added Font", "Home › Font", remove).params(r#"{"family": string}"#).pure(),
-        CommandSpec::new("font.missing", "Font Substitution…", "File › Options › Advanced", missing).pure(),
+        CommandSpec::new("font.missing", "Font Substitution…", "File › Options › Advanced", missing)
+            .params(r#"{} → {"missing": [{"font": string, "shownAs": [string] (the families drawn instead), "metricCompatible": bool (its substitute measures like the font)}]} — the text the current view shows"#)
+            .pure(),
     ]
 }
 
@@ -105,8 +106,19 @@ fn remove(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"removed": gone.iter().map(font_json).collect::<Vec<_>>()}))
 }
 
-/// Most paragraphs [`missing_fonts`] looks at, so a huge document can't stall the status bar.
-const MAX_SCANNED_PARAS: usize = 200_000;
+/// A font the document's text asks for that isn't installed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MissingFont {
+    /// The name the document asks for.
+    pub font: String,
+    /// The families its text is drawn in instead: the substitute, and fallback faces for
+    /// characters the substitute lacks.
+    pub shown_as: Vec<String>,
+    /// The font's substitute measures like it (Carlito for Calibri…): line breaks don't move.
+    /// Fallback faces for characters the substitute lacks don't count: the font itself might
+    /// lack them too (an emoji in Calibri text).
+    pub metric_compatible: bool,
+}
 
 /// The family shown for text set in `font` when it isn't installed (None when it is).
 pub fn shown_as(font: &str) -> Option<String> {
@@ -117,36 +129,48 @@ pub fn shown_as(font: &str) -> Option<String> {
     r.substituted.then(|| r.face.get().family.clone())
 }
 
-/// The fonts the document's text is set in that aren't installed, each with the family shown
-/// instead, by name. Every story counts (headers, notes, text boxes…); a font only a style
-/// names, with no text set in it, doesn't.
-pub fn missing_fonts(doc: &Document) -> Vec<(String, String)> {
-    let mut seen: BTreeMap<String, Option<String>> = BTreeMap::new();
-    let mut scanned = 0usize;
-    let stories = std::iter::once(StoryRef::Body).chain(doc.parts.keys().map(|id| StoryRef::Part(*id)));
-    'stories: for story in stories {
-        for path in doc.para_paths(story) {
-            scanned += 1;
-            if scanned > MAX_SCANNED_PARAS {
-                break 'stories;
+/// Whether text in `font` drawn in `substitute` is worth a warning: the substitute measures
+/// differently, so line breaks can move, and the font isn't a symbol font (drawn as its
+/// Unicode equivalents on purpose, which layout leaves out of [`missing_fonts`] too). The one
+/// rule the font box and the status bar share.
+pub fn warns(font: &str, substitute: &str) -> bool {
+    !wordcraft_doc::symbol_fonts::is_symbol_font(font) && !wordcraft_fonts::word::metric_compatible(font, substitute)
+}
+
+/// [`shown_as`] when it [`warns`]: what the font box warns about.
+pub fn layout_changing_substitute(font: &str) -> Option<String> {
+    shown_as(font).filter(|s| warns(font, s))
+}
+
+/// The fonts the laid-out text asks for that aren't installed, from what layout drew
+/// ([`DocLayout::substituted_fonts`]): only text the current view shows counts (no headers or
+/// footers in Web, Draft or Read view), in every story on its pages, list labels and field
+/// results included. Names differing only in case are one font.
+pub fn missing_fonts(layout: &DocLayout) -> Vec<MissingFont> {
+    let mut out: Vec<MissingFont> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (font, face) in layout.substituted_fonts() {
+        let family = face.get().family.clone();
+        let font = font.trim();
+        match index.get(&font.to_lowercase()).and_then(|&i| out.get_mut(i)) {
+            Some(m) => {
+                if !m.shown_as.contains(&family) {
+                    m.shown_as.push(family);
+                }
             }
-            let Some(p) = doc.para(story, &path) else { continue };
-            for (r, c) in p.run_ranges() {
-                if r.is_empty() {
-                    continue;
-                }
-                let font = doc.styles.resolve_char(p.props.style.as_deref(), c).font;
-                if let std::collections::btree_map::Entry::Vacant(e) = seen.entry(font) {
-                    let shown = shown_as(e.key());
-                    e.insert(shown);
-                }
+            None => {
+                index.insert(font.to_lowercase(), out.len());
+                let metric_compatible = shown_as(font).is_some_and(|s| !warns(font, &s));
+                out.push(MissingFont { font: font.to_string(), shown_as: vec![family], metric_compatible });
             }
         }
     }
-    seen.into_iter().filter_map(|(font, shown)| Some((font, shown?))).collect()
+    out.sort_by_cached_key(|m| m.font.to_lowercase());
+    out
 }
 
 fn missing(s: &mut Session, _: &Value) -> CmdResult {
-    let fonts = missing_fonts(&s.doc);
-    Ok(json!({"missing": fonts.iter().map(|(font, shown)| json!({"font": font, "shownAs": shown})).collect::<Vec<_>>()}))
+    let fonts: Vec<Value> =
+        missing_fonts(&s.layout()).iter().map(|f| json!({"font": f.font, "shownAs": f.shown_as, "metricCompatible": f.metric_compatible})).collect();
+    Ok(json!({"missing": fonts}))
 }

@@ -1499,14 +1499,15 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 if *asian {
                     ui.label(tl!("Asian text font:"));
                     let fams = app.previews.east_asian_families();
-                    if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_asian", 220.0, font_ea, &fams, Some(&*prev), None) {
+                    let ea_shown_as = wordcraft_engine::cmd::font::layout_changing_substitute(&app.previews.font_stored(font_ea));
+                    if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_asian", 220.0, font_ea, &fams, Some(&*prev), ea_shown_as.as_deref()) {
                         *font_ea = f;
                     }
                     ui.end_row();
                 }
                 ui.label(if *asian { tl!("Latin text font:") } else { tl!("Font:") });
                 let fams = app.previews.families();
-                let shown_as = wordcraft_engine::cmd::font::shown_as(&app.previews.font_stored(font));
+                let shown_as = wordcraft_engine::cmd::font::layout_changing_substitute(&app.previews.font_stored(font));
                 if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_font", 220.0, font, &fams, Some(&*prev), shown_as.as_deref()) {
                     *font = f;
                 }

@@ -594,11 +594,14 @@ pub fn state(s: &Session) -> Value {
     let style = s.doc.para_at(&s.sel.focus).and_then(|p| p.props.style.clone()).unwrap_or_else(|| "Normal".into());
     let style_name = s.doc.styles.get(&style).map(|st| st.name.clone()).unwrap_or(style.clone());
     let font = same(&|r| json!(r.font));
-    // The family drawn instead when the font isn't installed, so the font box can say so.
+    // The family drawn instead when the font isn't installed, and the same when it's worth the
+    // font box's warning (the substitute measures differently; not a symbol font).
     let shown_as = font.as_str().and_then(crate::cmd::font::shown_as);
+    let warning = font.as_str().zip(shown_as.as_deref()).filter(|(f, s)| crate::cmd::font::warns(f, s)).map(|(_, s)| s.to_string());
     json!({
         "font": font,
         "fontShownAs": shown_as,
+        "fontWarning": warning,
         "fontEastAsia": same(&|r| json!(r.font_ea)),
         "size": same(&|r| json!(r.size)),
         "bold": all.iter().all(|r| r.bold),
