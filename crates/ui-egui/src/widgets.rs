@@ -486,7 +486,7 @@ pub fn combo(
     items: &[String],
     preview: Option<&dyn Fn(&mut Ui, &str) -> Response>,
 ) -> Option<String> {
-    combo_impl(ui, id, width, current, items, preview, false)
+    combo_impl(ui, id, width, current, items, preview, false, None)
 }
 
 /// What [`font_combo`] returns when its list's last entry, Add Font…, is chosen (#582): the
@@ -497,7 +497,8 @@ pub const ADD_FONT: &str = "\u{1}font.add";
 /// Its list ends with Add Font… ([`ADD_FONT`]).
 /// Up/Down move the highlight, Enter or a click applies the highlighted family ("arial" applies
 /// "Arial"), Escape restores the current font. Text matching no family is applied as typed, as
-/// Word allows fonts that are not installed.
+/// Word allows fonts that are not installed. With `shown_as` (the family drawn instead of a
+/// `current` font that isn't installed) the box carries a warning mark saying so.
 pub fn font_combo(
     ui: &mut Ui,
     id: &str,
@@ -505,8 +506,19 @@ pub fn font_combo(
     current: &str,
     items: &[String],
     preview: Option<&dyn Fn(&mut Ui, &str) -> Response>,
+    shown_as: Option<&str>,
 ) -> Option<String> {
-    combo_impl(ui, id, width, current, items, preview, true)
+    combo_impl(ui, id, width, current, items, preview, true, shown_as)
+}
+
+/// The hover text for a font that isn't installed, `shown_as` drawn instead.
+pub fn missing_font_tip(font: &str, shown_as: &str) -> String {
+    crate::i18n::fmt(
+        tl!(
+            "{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it."
+        ),
+        &[("font", font), ("shown", shown_as)],
+    )
 }
 
 /// Indices of the `items` matching `query`, ignoring case: exact matches, then the names starting
@@ -557,6 +569,7 @@ fn combo_impl(
     items: &[String],
     preview: Option<&dyn Fn(&mut Ui, &str) -> Response>,
     search: bool,
+    shown_as: Option<&str>,
 ) -> Option<String> {
     let mut out = None;
     let edit_id = ui.id().with(("combo_text", id));
@@ -580,8 +593,21 @@ fn combo_impl(
                 }
             });
         }
-        let te = egui::TextEdit::singleline(&mut text).id(te_id).desired_width(width - 16.0).font(regular(12.0)).margin(vec2(4.0, 3.0));
-        let resp = ui.add(te);
+        // A font that isn't installed: room at the field's right end for the warning mark.
+        let mark = shown_as.filter(|_| !current.is_empty());
+        let right = if mark.is_some() { 18 } else { 4 };
+        let te = egui::TextEdit::singleline(&mut text).id(te_id).desired_width(width - 16.0).font(regular(12.0)).margin(egui::Margin {
+            left: 4,
+            right,
+            top: 3,
+            bottom: 3,
+        });
+        let mut resp = ui.add(te);
+        if let Some(shown) = mark {
+            let r = Rect::from_center_size(pos2(resp.rect.right() - 9.0, resp.rect.center().y), vec2(12.0, 12.0));
+            icons::paint(ui.painter(), r, "fontMissing", t.icon, t.accent);
+            resp = resp.on_hover_text(missing_font_tip(current, shown));
+        }
         keytip_badge(ui, resp.rect, "combo", id);
         focused = resp.has_focus();
         let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -934,7 +960,7 @@ mod tests {
                 if n == 0 {
                     ui.memory_mut(|m| m.request_focus(ui.id().with(("combo_edit", "f"))));
                 }
-                let v = if search { font_combo(ui, "f", 150.0, "", items, None) } else { combo(ui, "f", 150.0, "", items, None) };
+                let v = if search { font_combo(ui, "f", 150.0, "", items, None, None) } else { combo(ui, "f", 150.0, "", items, None) };
                 out = out.take().or(v);
             })
             .drop_without_applying_deltas();

@@ -406,6 +406,9 @@ pub struct WordApp {
     pub quit_requested: bool,
     pub autosave: bool,
     pub word_count: (u64, usize),
+    /// The document's fonts that aren't installed and the fonts shown instead, for the status
+    /// bar, keyed by the document revision and the font database generation.
+    pub missing_fonts: ((u64, u64), Vec<(String, String)>),
     last_autosave: f64,
     /// The tab shown before the Equation tab came up (restored when editing ends).
     pub(crate) equation_prev_tab: Option<String>,
@@ -500,6 +503,7 @@ impl WordApp {
             quit_requested: false,
             autosave: true,
             word_count: (0, 0),
+            missing_fonts: ((u64::MAX, u64::MAX), Vec::new()),
             last_autosave: 0.0,
             equation_prev_tab: None,
             smart_art_item: None,

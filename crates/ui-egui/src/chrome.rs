@@ -397,6 +397,32 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 if app.session.doc.settings.track_changes {
                     st(ui, tl!("Track Changes: On"));
                 }
+                // Fonts the document uses that aren't installed: they're drawn in other fonts, so
+                // the text can wrap and paginate unlike where the document was made.
+                let missing = app.cached_missing_fonts().to_vec();
+                if !missing.is_empty() {
+                    let label = if missing.len() == 1 {
+                        tl!("1 font not installed").to_string()
+                    } else {
+                        crate::i18n::fmt(tl!("{count} fonts not installed"), &[("count", &missing.len().to_string())])
+                    };
+                    let (ir, _) = ui.allocate_exact_size(vec2(13.0, 13.0), Sense::hover());
+                    icons::paint(ui.painter(), ir, "fontMissing", t.icon, t.accent);
+                    ui.add_space(-10.0);
+                    let resp = st(ui, &label).on_hover_text(tl!("Shown in substitute fonts. Click for details."));
+                    egui::Popup::menu(&resp).show(|ui| {
+                        ui.set_min_width(260.0);
+                        ui.label(egui::RichText::new(tl!("Not installed — shown as")).strong());
+                        for (font, shown) in &missing {
+                            ui.label(format!("{font} → {shown}"));
+                        }
+                        ui.separator();
+                        if ui.button(tl!("Add Font…")).clicked() {
+                            let _ = app.run("font.add", json!({}));
+                            ui.close();
+                        }
+                    });
+                }
                 if app.session.prefs.overtype && st(ui, tl!("Overtype")).on_hover_text(tl!("Click to switch back to inserting")).clicked() {
                     let _ = app.run("text.overtype", json!({"value": false}));
                 }
@@ -501,6 +527,16 @@ fn small_icon(ui: &mut Ui, icon: &str, tip: &str) -> bool {
 
 impl WordApp {
     /// Word count, recomputed only when the document changes.
+    /// [`wordcraft_engine::cmd::font::missing_fonts`], computed again only when the document
+    /// or the installed fonts change.
+    pub fn cached_missing_fonts(&mut self) -> &[(String, String)] {
+        let key = (self.session.rev(), wordcraft_fonts::FontDb::global().generation());
+        if self.missing_fonts.0 != key {
+            self.missing_fonts = (key, wordcraft_engine::cmd::font::missing_fonts(&self.session.doc));
+        }
+        &self.missing_fonts.1
+    }
+
     pub fn cached_word_count(&mut self) -> usize {
         // The count option changes the count without a document change.
         let key = self.session.rev().wrapping_mul(2) | u64::from(self.session.prefs.count_notes);

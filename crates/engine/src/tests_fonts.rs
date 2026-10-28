@@ -105,3 +105,42 @@ fn bad_font_input_is_an_error() {
     assert_eq!(r["pending"], true);
     assert!(s.ui_requests.iter().any(|r| r["open"] == "addFont"));
 }
+
+#[test]
+fn fonts_that_are_not_installed_are_reported_with_the_font_shown_instead() {
+    // A family no system has, with no Serif/Mono in its name: it's drawn in a sans substitute.
+    const MISSING: &str = "Wordcraft Nowhere Face";
+    let mut s = Session::new(wordcraft_doc::Document::new());
+    s.run("document.setText", &json!({"text": "Bundled\nMissing"})).unwrap();
+    s.run("select.all", &json!({})).unwrap();
+    s.run("format.font", &json!({"name": "JetBrains Mono"})).unwrap();
+    assert!(s.run("format.state", &json!({})).unwrap()["fontShownAs"].is_null(), "a bundled font is installed");
+    assert_eq!(s.run("font.missing", &json!({})).unwrap()["missing"], json!([]));
+
+    s.run("select.text", &json!({"text": "Missing"})).unwrap();
+    s.run("format.font", &json!({"name": MISSING})).unwrap();
+    let st = s.run("format.state", &json!({})).unwrap();
+    assert_eq!(st["font"], MISSING);
+    let shown = st["fontShownAs"].as_str().unwrap_or_default().to_string();
+    assert!(!shown.is_empty() && shown != MISSING, "the font box learns the substitute: {st}");
+
+    let m = s.run("font.missing", &json!({})).unwrap();
+    assert_eq!(m["missing"], json!([{"font": MISSING, "shownAs": shown}]), "only the missing font, once");
+
+    // A mixed selection has no single font, so nothing to flag in the font box.
+    s.run("select.all", &json!({})).unwrap();
+    assert!(s.run("format.state", &json!({})).unwrap()["fontShownAs"].is_null());
+}
+
+#[test]
+fn a_font_only_a_style_names_is_not_reported_missing() {
+    // Text in the style's font is; a style no text uses isn't.
+    let mut s = Session::new(wordcraft_doc::Document::new());
+    s.run("document.setText", &json!({"text": "Body"})).unwrap();
+    let missing = s.run("font.missing", &json!({})).unwrap();
+    let fonts: Vec<String> = missing["missing"].as_array().unwrap().iter().map(|m| m["font"].as_str().unwrap().to_string()).collect();
+    let st = s.run("format.state", &json!({})).unwrap();
+    let body_font = st["font"].as_str().unwrap();
+    assert_eq!(fonts.contains(&body_font.to_string()), !st["fontShownAs"].is_null(), "{fonts:?} vs {st}");
+    assert!(fonts.len() <= 1, "only the body text's font can be missing: {fonts:?}");
+}

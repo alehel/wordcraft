@@ -1,4 +1,5 @@
-//! Fonts the user adds without rebuilding (#582): `font.add`, `font.list`, `font.remove`.
+//! Fonts the user adds without rebuilding (#582): `font.add`, `font.list`, `font.remove`; and
+//! the document's fonts that aren't installed, with the fonts shown instead (`font.missing`).
 //!
 //! An added font joins the process-wide font database on top of the bundled and system fonts
 //! (never replacing a face already there), so it shows in the font lists, lays out, renders and
@@ -6,6 +7,9 @@
 //! folder (desktop); without one it lasts for the session (the web shell stores it itself).
 
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+
+use wordcraft_doc::{Document, StoryRef};
 use wordcraft_fonts::{FontDb, UserFont};
 
 use crate::cmd::insert::base64_decode;
@@ -18,6 +22,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .pure(),
         CommandSpec::new("font.list", "Added Fonts", "Home › Font", list).params(r#"{"all"?: bool (also every available family)}"#).pure(),
         CommandSpec::new("font.remove", "Remove Added Font", "Home › Font", remove).params(r#"{"family": string}"#).pure(),
+        CommandSpec::new("font.missing", "Font Substitution…", "File › Options › Advanced", missing).pure(),
     ]
 }
 
@@ -98,4 +103,50 @@ fn remove(s: &mut Session, v: &Value) -> CmdResult {
     s.relayout();
     s.status = format!("Removed {}", family.trim());
     Ok(json!({"removed": gone.iter().map(font_json).collect::<Vec<_>>()}))
+}
+
+/// Most paragraphs [`missing_fonts`] looks at, so a huge document can't stall the status bar.
+const MAX_SCANNED_PARAS: usize = 200_000;
+
+/// The family shown for text set in `font` when it isn't installed (None when it is).
+pub fn shown_as(font: &str) -> Option<String> {
+    if font.trim().is_empty() {
+        return None;
+    }
+    let r = wordcraft_fonts::word::resolve(font, false, false);
+    r.substituted.then(|| r.face.get().family.clone())
+}
+
+/// The fonts the document's text is set in that aren't installed, each with the family shown
+/// instead, by name. Every story counts (headers, notes, text boxes…); a font only a style
+/// names, with no text set in it, doesn't.
+pub fn missing_fonts(doc: &Document) -> Vec<(String, String)> {
+    let mut seen: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut scanned = 0usize;
+    let stories = std::iter::once(StoryRef::Body).chain(doc.parts.keys().map(|id| StoryRef::Part(*id)));
+    'stories: for story in stories {
+        for path in doc.para_paths(story) {
+            scanned += 1;
+            if scanned > MAX_SCANNED_PARAS {
+                break 'stories;
+            }
+            let Some(p) = doc.para(story, &path) else { continue };
+            for (r, c) in p.run_ranges() {
+                if r.is_empty() {
+                    continue;
+                }
+                let font = doc.styles.resolve_char(p.props.style.as_deref(), c).font;
+                if let std::collections::btree_map::Entry::Vacant(e) = seen.entry(font) {
+                    let shown = shown_as(e.key());
+                    e.insert(shown);
+                }
+            }
+        }
+    }
+    seen.into_iter().filter_map(|(font, shown)| Some((font, shown?))).collect()
+}
+
+fn missing(s: &mut Session, _: &Value) -> CmdResult {
+    let fonts = missing_fonts(&s.doc);
+    Ok(json!({"missing": fonts.iter().map(|(font, shown)| json!({"font": font, "shownAs": shown})).collect::<Vec<_>>()}))
 }

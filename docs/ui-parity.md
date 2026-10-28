@@ -1,6 +1,6 @@
 # UI parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** trivial (selection bar in the left margin, #856; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously major: first version; ribbon, dialogs, shortcuts and on-canvas interaction measured from `crates/ui-egui` and the command registry) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-28 · **Change:** trivial (missing fonts flagged in the font box and status bar; previously trivial: selection bar in the left margin, #856; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously major: first version; ribbon, dialogs, shortcuts and on-canvas interaction measured from `crates/ui-egui` and the command registry) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft looks and feels next to Word: ribbon, dialogs, panes, keyboard, mouse and touch.
 Typing behaviour has its own checklist ([`typing-parity.md`](typing-parity.md)). All assets are our
@@ -56,6 +56,7 @@ own (`AGENTS.md`: no Microsoft iconography, ever).
 | 2026-10-12 | trivial | Alt+Q moves to "Tell me" command search, as in Word for Windows (#819) |
 | 2026-10-12 | trivial | Ribbon groups fit above their labels: View › Show puts Hide White Space (#645) in a second column instead of a fourth row over the "Show" label; Developer › Controls drops the gaps that pushed it into its label; Layout › Paragraph (#654) puts its column gap inside cells (no `add_space` in the grid, a debug assertion) and 1.5 pt between rows so it fits; `ribbon_groups_fit_above_their_labels` checks every tab in every language |
 | 2026-10-12 | trivial | Window caption: a file name in a script the interface fonts lack (Hebrew, Arabic, and the rest; CJK via the CJK UI font) is drawn with a fallback face instead of `?` |
+| 2026-10-28 | trivial | Fonts that aren't installed are flagged: the font box (ribbon, mini toolbar, Font dialog) shows a warning mark whose tooltip names the font drawn instead; the status bar says "N fonts not installed" and lists each with its substitute, with Add Font…; `font.missing` and `format.state.fontShownAs` for agents |
 | 2026-10-12 | trivial | Save Changes prompt: Save has focus when it opens, so Enter, Tab and the arrow keys answer without the mouse (#861) |
 | 2026-10-12 | trivial | Navigation headings truncate with an ellipsis within the pane width, preserving resizing and full-text hover (#759) |
 | 2026-10-11 | minor | Reading Mode: viewport-height horizontal columns, animated paging, transient display controls, heading navigation and responsive anchored resizing |

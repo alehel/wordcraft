@@ -1410,6 +1410,12 @@ pub fn paint(p: &Painter, r: Rect, name: &str, c: Color32, accent: Color32) {
             pen.rect(5.0, 11.0, 15.0, 15.0, c);
             pen.line_c(&[(10.0, 15.0), (10.0, 18.5)], a);
         }
+        // A warning triangle: a document font that isn't installed (shown in another font).
+        "fontMissing" => {
+            pen.fill(&[(10.0, 2.5), (18.5, 17.5), (1.5, 17.5)], orange);
+            pen.line_c(&[(10.0, 7.5), (10.0, 12.5)], Color32::WHITE);
+            pen.fcircle(10.0, 15.0, 1.0, Color32::WHITE);
+        }
         "designMode" => {
             pen.line(&[(4.0, 16.0), (16.0, 16.0), (4.0, 4.0), (4.0, 16.0)]);
             pen.line_c(&[(4.0, 12.0), (8.0, 16.0)], a);
