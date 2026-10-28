@@ -2473,3 +2473,12 @@
 	Table Properties…	Táblázat tulajdonságai…
 	Search	Keresés
 	Title Bar	Címsor
+	1 font not installed	1 betűtípus nincs telepítve
+	{count} fonts not installed	{count} betűtípus nincs telepítve
+	Shown in substitute fonts. Click for details.	Helyettesítő betűtípusokkal megjelenítve. Kattintson a részletekért.
+	Not installed — shown as	Nincs telepítve — megjelenítve ezzel
+	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	A(z) {font} betűtípus nincs telepítve ezen a számítógépen, ezért a szövege {shown} betűtípussal jelenik meg. A sortörések és az oldalszám eltérhet attól, ahol a dokumentum készült. A Betűtípus hozzáadása… paranccsal telepítheti.
+	…and {count} more	…és még {count}
+	Missing Fonts	Hiányzó betűtípusok
+	Every font the document shows is installed	A dokumentumban megjelenő összes betűtípus telepítve van
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	A nem telepített betűtípusok azonos méretű betűtípusokkal jelennek meg: a sortörések nem változnak

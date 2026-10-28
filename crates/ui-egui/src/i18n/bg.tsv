@@ -2464,3 +2464,12 @@
 	Table Properties…	Свойства на таблица…
 	Search	Търсене
 	Title Bar	Заглавна лента
+	1 font not installed	1 шрифт не е инсталиран
+	{count} fonts not installed	Неинсталирани шрифтове: {count}
+	Shown in substitute fonts. Click for details.	Показани със заместващи шрифтове. Щракнете за подробности.
+	Not installed — shown as	Не е инсталиран — показан като
+	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} не е инсталиран на този компютър, затова текстът му е показан с {shown}. Пренасянето на редове и броят страници може да се различават от тези, където е създаден документът. „Добавяне на шрифт…“ го инсталира.
+	…and {count} more	…и още {count}
+	Missing Fonts	Липсващи шрифтове
+	Every font the document shows is installed	Всички шрифтове в документа са инсталирани
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Неинсталираните шрифтове са показани с шрифтове със същите размери: пренасянето на редове не се променя

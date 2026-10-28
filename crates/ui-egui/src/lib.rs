@@ -406,6 +406,9 @@ pub struct WordApp {
     pub quit_requested: bool,
     pub autosave: bool,
     pub word_count: (u64, usize),
+    /// The document's fonts that aren't installed, for the status bar, and the layout they were
+    /// read from.
+    pub missing_fonts: (std::sync::Weak<wordcraft_layout::DocLayout>, crate::chrome::MissingFontsCache),
     last_autosave: f64,
     /// The tab shown before the Equation tab came up (restored when editing ends).
     pub(crate) equation_prev_tab: Option<String>,
@@ -500,6 +503,7 @@ impl WordApp {
             quit_requested: false,
             autosave: true,
             word_count: (0, 0),
+            missing_fonts: (std::sync::Weak::new(), Default::default()),
             last_autosave: 0.0,
             equation_prev_tab: None,
             smart_art_item: None,

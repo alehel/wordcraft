@@ -304,6 +304,9 @@ pub struct LabelRun {
 #[derive(Clone, Debug)]
 pub struct ParaLayout {
     pub rp: ResolvedPara,
+    /// Fonts the shown text (and list label) asks for that aren't installed, each with a face
+    /// it was drawn in instead: a substitute or a fallback face covering its characters.
+    pub substituted: Vec<(String, FaceRef)>,
     pub styles: Vec<StyleRun>,
     pub glyphs: Vec<Glyph>,
     pub clusters: Vec<Cluster>,
@@ -495,6 +498,9 @@ struct Builder<'a> {
     levels: Vec<u8>,
     /// Text drawn by clusters that stand for an object, by cluster index (see `ParaLayout::shown`).
     shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
+    /// Fonts asked for that aren't installed, and the faces drawn instead (see
+    /// `ParaLayout::substituted`).
+    substituted: Vec<(String, FaceRef)>,
 }
 
 /// What a piece of text is shaped as: one face, case, script formatting and direction.
@@ -622,6 +628,26 @@ pub fn visual_order(levels: &[u8]) -> Vec<usize> {
     order
 }
 
+/// `font` as [`ParaLayout::substituted`] records it: a hostile file's font name can be
+/// megabytes long, so the first 256 characters. Look names up through this to match it.
+pub fn reported_font_name(font: &str) -> &str {
+    font.char_indices().nth(256).and_then(|(i, _)| font.get(..i)).unwrap_or(font)
+}
+
+/// Whether `c` draws anything: not whitespace, a control, an object's placeholder or a
+/// Unicode Default_Ignorable_Code_Point (soft hyphen, zero-width spaces and joiners, bidi
+/// controls, variation selectors, Hangul fillers, the BOM, tags…).
+pub fn draws_something(c: char) -> bool {
+    !c.is_whitespace()
+        && !c.is_control()
+        && c != OBJ
+        && !matches!(c,
+            '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}'..='\u{1160}' | '\u{17B4}'..='\u{17B5}' | '\u{180B}'..='\u{180F}'
+            | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{206F}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}'
+            | '\u{FEFF}' | '\u{FFA0}' | '\u{FFF0}'..='\u{FFF8}' | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}')
+}
+
 /// Text Word sets in the East Asian font: CJK ideographs, kana, bopomofo, CJK punctuation and
 /// fullwidth forms, and Hangul.
 fn east_asian(c: char) -> bool {
@@ -690,6 +716,20 @@ impl<'a> Builder<'a> {
         i
     }
 
+    /// Record that text asking for `font` (not installed) was drawn in `drawn`, once per pair;
+    /// at most 64 pairs a paragraph, so a hostile file can't grow the list without bound. Symbol
+    /// fonts (Symbol, Wingdings…) are drawn as their Unicode equivalents on purpose: not worth
+    /// reporting (most Word bullets would be).
+    fn note_substituted(&mut self, font: &str, drawn: FaceRef) {
+        if wordcraft_doc::symbol_fonts::is_symbol_font(font) {
+            return;
+        }
+        let font = reported_font_name(font);
+        if !self.substituted.iter().any(|(f, d)| d.id() == drawn.id() && f == font) && self.substituted.len() < 64 {
+            self.substituted.push((font.to_string(), drawn));
+        }
+    }
+
     /// Shape `text` (a piece of the paragraph starting at byte `base`) in one style and append clusters.
     fn shape(&mut self, text: &str, base: usize, rc: &Arc<ResolvedChar>, kind_override: Option<ClKind>) {
         self.shape_with(text, base, rc, kind_override, true);
@@ -709,16 +749,16 @@ impl<'a> Builder<'a> {
         // Symbol-font characters are laid out as their Unicode equivalents.
         let sym = SymbolRun::of(&rc.font, &resolved);
         let show = |c: char| sym.map_or(c, |m| m.show(c));
-        let primary_cs = rc_cs.as_ref().map(|r| wordcraft_fonts::word::resolve(&r.font, r.bold, r.italic).face);
+        let resolved_cs = rc_cs.as_ref().map(|r| wordcraft_fonts::word::resolve(&r.font, r.bold, r.italic));
+        let primary_cs = resolved_cs.map(|r| r.face);
         // Chinese, Japanese and Korean characters use the run's East Asian font (`w:eastAsia`) when
         // it is installed and has them.
-        let primary_ea = rc
+        let wanted_ea = rc
             .font_ea
-            .as_ref()
+            .as_deref()
             .filter(|f| !f.eq_ignore_ascii_case(&rc.font) && text.chars().any(east_asian))
-            .map(|f| wordcraft_fonts::word::resolve(f, rc.bold, rc.italic))
-            .filter(|r| !r.substituted)
-            .map(|r| r.face);
+            .map(|f| (f, wordcraft_fonts::word::resolve(f, rc.bold, rc.italic)));
+        let primary_ea = wanted_ea.filter(|(_, r)| !r.substituted).map(|(_, r)| r.face);
         let use_levels = para_text && !self.levels.is_empty();
         let context = if self.env.numeral == NumeralMode::Context && use_levels { context_digit_dirs(text, &self.levels, base) } else { Vec::new() };
         // One fallback face for the run's East Asian characters: the first face in fallback order
@@ -784,6 +824,36 @@ impl<'a> Builder<'a> {
             segs.push((seg_start, text.len(), p));
         }
         let no_kern = [wordcraft_fonts::feature_value(b"kern", 0)];
+        // The East Asian font asked for CJK text when it isn't installed (layout draws that text
+        // in the Latin font or a fallback face instead).
+        let ea_missing = wanted_ea.filter(|(_, r)| r.substituted).map(|(f, _)| f);
+        let cs_missing = resolved_cs.is_some_and(|r| r.substituted);
+        let latin_missing = resolved.substituted;
+        let visible = draws_something;
+        for &(a, b, key) in segs.iter().filter(|_| latin_missing || cs_missing || ea_missing.is_some()) {
+            let Some(sub) = text.get(a..b).filter(|t| t.chars().any(visible)) else { continue };
+            let drawn = key.face.unwrap_or(if key.complex { primary_cs.unwrap_or(primary) } else { primary });
+            if key.complex {
+                if cs_missing && let Some(cs) = &rc_cs {
+                    self.note_substituted(&cs.font, drawn);
+                }
+                continue;
+            }
+            // The segment's CJK characters drawn in the installed East Asian font ask for nothing
+            // missing; other characters a fallback put in that same face still ask for the
+            // Latin font.
+            let in_ea_font = key.face.zip(primary_ea).is_some_and(|(f, ea)| f.id() == ea.id());
+            let latin_chars = sub.chars().any(|c| visible(c) && !east_asian(c));
+            // CJK text asks for the East Asian font when the run names one; the Latin font only
+            // for the other characters, or for CJK text when no East Asian font is named.
+            let asks_latin = latin_chars || (wanted_ea.is_none() && !in_ea_font);
+            if latin_missing && asks_latin {
+                self.note_substituted(&rc.font, drawn);
+            }
+            if let Some(f) = ea_missing.filter(|_| !in_ea_font && sub.chars().any(east_asian)) {
+                self.note_substituted(f, drawn);
+            }
+        }
         for (a, b, key) in segs {
             let Some(sub) = text.get(a..b) else { continue };
             let rc = match (&rc_cs, key.complex) {
@@ -1168,8 +1238,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
     }
     let resolve = |c: &CharProps| -> Arc<ResolvedChar> { Arc::new(doc.styles.resolve_char_in(para_style, table_chr, c)) };
     let levels = bidi_levels(&p.text, rp.bidi);
-    let mut b =
-        Builder { env, styles: Vec::new(), style_index: Default::default(), glyphs: Vec::new(), clusters: Vec::new(), levels, shown: Vec::new() };
+    let mut b = Builder {
+        env,
+        styles: Vec::new(),
+        style_index: Default::default(),
+        glyphs: Vec::new(),
+        clusters: Vec::new(),
+        levels,
+        shown: Vec::new(),
+        substituted: Vec::new(),
+    };
     let mark_rc = resolve(&p.mark);
     let mark_style = b.style(&mark_rc, None, false);
     let mut has_page_fields = false;
@@ -1481,6 +1559,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
 
     let mut pl = ParaLayout {
         rp,
+        substituted: b.substituted,
         styles: b.styles,
         glyphs: b.glyphs,
         clusters: b.clusters,

@@ -31,6 +31,7 @@ use wordcraft_doc::para::{Anchor, Float, FloatAlign, InlineObject, Wrap, WrapTex
 use wordcraft_doc::props::{Border, CharProps, Rgb, TableFloat, TextDirection};
 use wordcraft_doc::section::{HeaderSet, SectionProps, SectionStart};
 use wordcraft_doc::{Block, Blocks, Document, Paragraph, Path, StoryRef};
+use wordcraft_fonts::FaceRef;
 use wordcraft_geom::{Point, Rect, Spin};
 
 pub use fields::FieldCtx;
@@ -439,6 +440,49 @@ pub struct DocLayout {
     pub ms: f64,
     /// Text box stories laid out (each time a box's text was).
     pub text_boxes: usize,
+}
+
+/// Most (font, face) pairs [`DocLayout::substituted_fonts`] returns: a hostile file naming a
+/// new font in every paragraph can't make the list (and the status bar reading it) unbounded.
+pub const MAX_SUBSTITUTED: usize = 1024;
+
+impl DocLayout {
+    /// The fonts the laid-out text asks for that aren't installed, each with the faces it was
+    /// drawn in instead (`ParaLayout::substituted`), over every page's body, header, footer,
+    /// notes, text boxes and table cells: the text this view shows (Web, Draft and Read views lay
+    /// out no headers or footers). Chart and SmartArt labels, drawn apart from paragraphs, aren't
+    /// included. Each (font, face) pair once, in the order first met, at most [`MAX_SUBSTITUTED`].
+    pub fn substituted_fonts(&self) -> Vec<(String, FaceRef)> {
+        struct Walk<'a> {
+            /// Paragraphs looked at: one split over pages is placed once per piece.
+            paras: HashSet<usize>,
+            /// (font, face id) pairs already in `out`.
+            pairs: HashSet<(&'a str, u32)>,
+            out: Vec<(String, FaceRef)>,
+        }
+        fn walk<'a>(items: &'a [Placed], w: &mut Walk<'a>) {
+            for it in items {
+                match it {
+                    Placed::Lines { para, .. } if w.paras.insert(Arc::as_ptr(para) as usize) => {
+                        for (font, face) in &para.substituted {
+                            if w.out.len() < MAX_SUBSTITUTED && w.pairs.insert((font.as_str(), face.id())) {
+                                w.out.push((font.clone(), *face));
+                            }
+                        }
+                    }
+                    Placed::Clip { items, .. } => walk(items, w),
+                    _ => {}
+                }
+            }
+        }
+        let mut w = Walk { paras: HashSet::new(), pairs: HashSet::new(), out: Vec::new() };
+        for p in &self.pages {
+            for items in [&p.items, &p.header, &p.footer] {
+                walk(items, &mut w);
+            }
+        }
+        w.out
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
