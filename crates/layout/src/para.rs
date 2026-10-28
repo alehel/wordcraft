@@ -628,6 +628,26 @@ pub fn visual_order(levels: &[u8]) -> Vec<usize> {
     order
 }
 
+/// `font` as [`ParaLayout::substituted`] records it: a hostile file's font name can be
+/// megabytes long, so the first 256 characters. Look names up through this to match it.
+pub fn reported_font_name(font: &str) -> &str {
+    font.char_indices().nth(256).and_then(|(i, _)| font.get(..i)).unwrap_or(font)
+}
+
+/// Whether `c` draws anything: not whitespace, a control, an object's placeholder or a
+/// Unicode Default_Ignorable_Code_Point (soft hyphen, zero-width spaces and joiners, bidi
+/// controls, variation selectors, Hangul fillers, the BOM, tags…).
+pub fn draws_something(c: char) -> bool {
+    !c.is_whitespace()
+        && !c.is_control()
+        && c != OBJ
+        && !matches!(c,
+            '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}'..='\u{1160}' | '\u{17B4}'..='\u{17B5}' | '\u{180B}'..='\u{180F}'
+            | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{206F}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}'
+            | '\u{FEFF}' | '\u{FFA0}' | '\u{FFF0}'..='\u{FFF8}' | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}')
+}
+
 /// Text Word sets in the East Asian font: CJK ideographs, kana, bopomofo, CJK punctuation and
 /// fullwidth forms, and Hangul.
 fn east_asian(c: char) -> bool {
@@ -704,6 +724,7 @@ impl<'a> Builder<'a> {
         if wordcraft_doc::symbol_fonts::is_symbol_font(font) {
             return;
         }
+        let font = reported_font_name(font);
         if !self.substituted.iter().any(|(f, d)| d.id() == drawn.id() && f == font) && self.substituted.len() < 64 {
             self.substituted.push((font.to_string(), drawn));
         }
@@ -808,9 +829,7 @@ impl<'a> Builder<'a> {
         let ea_missing = wanted_ea.filter(|(_, r)| r.substituted).map(|(f, _)| f);
         let cs_missing = resolved_cs.is_some_and(|r| r.substituted);
         let latin_missing = resolved.substituted;
-        // Zero-width spaces, joiners and the BOM draw nothing either.
-        let visible =
-            |c: char| !c.is_whitespace() && !c.is_control() && !matches!(c, SOFT_HYPHEN | OBJ | '\u{200B}'..='\u{200D}' | '\u{2060}' | '\u{FEFF}');
+        let visible = draws_something;
         for &(a, b, key) in segs.iter().filter(|_| latin_missing || cs_missing || ea_missing.is_some()) {
             let Some(sub) = text.get(a..b).filter(|t| t.chars().any(visible)) else { continue };
             let drawn = key.face.unwrap_or(if key.complex { primary_cs.unwrap_or(primary) } else { primary });

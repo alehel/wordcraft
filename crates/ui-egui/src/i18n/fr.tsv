@@ -2083,10 +2083,12 @@
 	Table Properties…	Propriétés du tableau…
 	Search	Rechercher
 	Title Bar	Barre de titre
-	Font Substitution…	Substitution de polices…
 	1 font not installed	1 police non installée
 	{count} fonts not installed	{count} polices non installées
 	Shown in substitute fonts. Click for details.	Affichées avec des polices de substitution. Cliquez pour en savoir plus.
 	Not installed — shown as	Non installée — affichée en
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} n’est pas installée sur cet ordinateur : son texte est affiché en {shown}. Les retours à la ligne et le nombre de pages peuvent différer de ceux de l’ordinateur où le document a été créé. « Ajouter une police… » l’installe.
 	…and {count} more	…et {count} de plus
+	Missing Fonts	Polices manquantes
+	Every font the document shows is installed	Toutes les polices affichées par le document sont installées
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Les polices non installées sont affichées avec des polices de mêmes dimensions : les retours à la ligne ne bougent pas

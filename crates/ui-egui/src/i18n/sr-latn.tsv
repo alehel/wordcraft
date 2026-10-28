@@ -2085,10 +2085,12 @@
 	Start-up	Pokretanje
 	Show the Start screen when WordCraft starts	Prikaži početni ekran pri pokretanju programa WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Uključeno: WordCraft se otvara na Fajl › Početak, sa praznim dokumentom, šablonima i nedavnim dokumentima. Isključeno: otvara prazan dokument.
-	Font Substitution…	Zamena fontova…
 	1 font not installed	1 font nije instaliran
 	{count} fonts not installed	Neinstalirani fontovi: {count}
 	Shown in substitute fonts. Click for details.	Prikazano zamenskim fontovima. Kliknite za detalje.
 	Not installed — shown as	Nije instaliran — prikazan kao
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	Font {font} nije instaliran na ovom računaru, pa je njegov tekst prikazan fontom {shown}. Prelomi redova i broj stranica mogu se razlikovati od onih gde je dokument napravljen. „Dodaj font…“ ga instalira.
 	…and {count} more	…i još {count}
+	Missing Fonts	Fontovi koji nedostaju
+	Every font the document shows is installed	Svi fontovi prikazani u dokumentu su instalirani
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Neinstalirani fontovi prikazani su fontovima istih mera: prelomi redova se ne menjaju

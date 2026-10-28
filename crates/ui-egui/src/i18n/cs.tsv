@@ -2080,10 +2080,12 @@
 	Automatic ({region})	Automaticky ({region})
 	Search	Hledat
 	Title Bar	Záhlaví okna
-	Font Substitution…	Nahrazení písem…
 	1 font not installed	1 písmo není nainstalováno
 	{count} fonts not installed	Nenainstalovaná písma: {count}
 	Shown in substitute fonts. Click for details.	Zobrazeno náhradními písmy. Klikněte pro podrobnosti.
 	Not installed — shown as	Nenainstalováno — zobrazeno jako
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	Písmo {font} není v tomto počítači nainstalováno, proto se jeho text zobrazuje písmem {shown}. Zalomení řádků a počet stránek se mohou lišit od místa, kde dokument vznikl. Písmo nainstalujete příkazem Přidat písmo….
 	…and {count} more	…a dalších {count}
+	Missing Fonts	Chybějící písma
+	Every font the document shows is installed	Všechna písma zobrazená v dokumentu jsou nainstalována
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Nenainstalovaná písma se zobrazují písmy se stejnými rozměry: zalomení řádků se nemění

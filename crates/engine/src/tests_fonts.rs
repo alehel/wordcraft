@@ -189,7 +189,7 @@ fn missing_fonts_are_what_layout_drew_in_shown_text() {
         para_in("two", "wordcraft nowhere face"),
         para_in("three", "JetBrains Mono"),
         // Spaces, a picture's placeholder and zero-width characters show no font.
-        para_in(" \u{FFFC}\t\u{200B}\u{FEFF}", "Wordcraft Blank Face"),
+        para_in(" \u{FFFC}\t\u{200B}\u{FEFF}\u{FE0F}\u{3164}\u{034F}", "Wordcraft Blank Face"),
     ]);
     // Hidden text isn't laid out.
     doc.body.push(wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(
@@ -241,27 +241,33 @@ fn a_missing_east_asian_font_is_reported_for_cjk_text_only() {
 }
 
 #[test]
-fn the_font_box_warns_by_the_same_rule_as_the_status_bar() {
+fn symbol_fonts_are_shown_as_unicode_without_a_missing_font() {
     let mut s = Session::new(wordcraft_doc::Document::new());
-    s.run("document.setText", &json!({"text": "Text \u{F0FC}"})).unwrap();
+    s.run("document.setText", &json!({"text": "\u{F0FC}"})).unwrap();
     s.run("select.all", &json!({})).unwrap();
-    let state_for = |s: &mut Session, font: &str| {
-        s.run("format.font", &json!({"name": font})).unwrap();
-        s.run("format.state", &json!({})).unwrap()
-    };
-    // A made-up family: drawn in a substitute that measures differently.
-    let st = state_for(&mut s, "Wordcraft Nowhere Face");
-    assert!(st["fontWarning"].is_string() && st["fontWarning"] == st["fontShownAs"], "{st}");
-    // A symbol font is drawn as Unicode on purpose: shown as a substitute, but no warning, as
-    // the status bar leaves it out too.
-    let st = state_for(&mut s, "Wingdings");
-    assert!(st["fontWarning"].is_null(), "{st}");
+    s.run("format.font", &json!({"name": "Wingdings"})).unwrap();
+    // Not installed, so it's drawn in another face, but on purpose: nothing to report.
+    assert!(s.run("format.state", &json!({})).unwrap()["fontShownAs"].is_string());
     assert!(crate::cmd::font::missing_fonts(&s.layout()).is_empty());
-    // A metric twin, wherever Calibri isn't installed: the verdict matches the status bar's.
-    let st = state_for(&mut s, "Calibri");
-    let listed = crate::cmd::font::missing_fonts(&s.layout());
-    let flagged = listed.iter().any(|f| f.font == "Calibri" && !f.metric_compatible);
-    assert_eq!(st["fontWarning"].is_string(), flagged, "{st} vs {listed:?}");
+}
+
+#[test]
+fn missing_fonts_from_command_search_say_so_in_the_status_line() {
+    let mut s = Session::new(doc_of(vec![para_in("Text", "Wordcraft Nowhere Face")]));
+    s.run("font.missing", &json!({})).unwrap();
+    assert!(s.status.contains("Wordcraft Nowhere Face"), "{}", s.status);
+    // Thousands of missing fonts: a few named, the rest counted.
+    let mut s = Session::new(doc_of((0..40).map(|i| para_in("x", &format!("Wordcraft Many Face {i}"))).collect()));
+    s.run("font.missing", &json!({})).unwrap();
+    assert!(s.status.ends_with(" and 35 more") && s.status.len() < 300, "{}", s.status);
+}
+
+#[test]
+fn a_huge_font_name_is_kept_short() {
+    let name = format!("Wordcraft {}", "é".repeat(100_000));
+    let m = missing_in(doc_of(vec![para_in("Text", &name)]));
+    assert_eq!(m.len(), 1);
+    assert!(m[0].font.chars().count() <= 256, "{}", m[0].font.len());
 }
 
 #[test]
@@ -297,4 +303,28 @@ fn a_hostile_number_of_missing_fonts_stays_bounded() {
     let paras = (0..3000).map(|i| para_in("x", &format!("Wordcraft Hostile Face {i}"))).collect();
     let m = missing_in(doc_of(paras));
     assert!(!m.is_empty() && m.len() <= wordcraft_layout::MAX_SUBSTITUTED, "{}", m.len());
+}
+
+#[test]
+fn a_font_key_matches_the_listed_name_however_long_or_padded() {
+    // Leading spaces and more than 256 characters: layout keeps 256, the list trims them.
+    let name = format!("   Wordcraft {}", "x".repeat(400));
+    let m = missing_in(doc_of(vec![para_in("Text", &name)]));
+    assert_eq!(m.len(), 1);
+    assert_eq!(crate::cmd::font::font_key(&name), crate::cmd::font::font_key(&m[0].font));
+    // The status line shortens such names.
+    let mut s = Session::new(doc_of(vec![para_in("Text", &name)]));
+    s.run("font.missing", &json!({})).unwrap();
+    assert!(s.status.chars().count() < 80, "{}", s.status);
+}
+
+#[test]
+fn only_characters_that_draw_count() {
+    use wordcraft_layout::para::draws_something;
+    for c in ['a', '日', '€', '\u{1F600}'] {
+        assert!(draws_something(c), "{c:?}");
+    }
+    for c in [' ', '\t', '\u{FFFC}', '\u{00AD}', '\u{200B}', '\u{FE0F}', '\u{3164}', '\u{FFF0}', '\u{1BCA0}', '\u{E0041}'] {
+        assert!(!draws_something(c), "{c:?}");
+    }
 }

@@ -2473,10 +2473,12 @@ preview	Title	Örnek
 	Level 7	Düzey 7
 	Level 8	Düzey 8
 	Level 9	Düzey 9
-	Font Substitution…	Yazı Tipi Değiştirme…
 	1 font not installed	1 yazı tipi yüklü değil
 	{count} fonts not installed	{count} yazı tipi yüklü değil
 	Shown in substitute fonts. Click for details.	Yedek yazı tipleriyle gösteriliyor. Ayrıntılar için tıklayın.
 	Not installed — shown as	Yüklü değil — şununla gösteriliyor
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} bu bilgisayarda yüklü değil, bu nedenle metni {shown} ile gösteriliyor. Satır sonları ve sayfa sayısı, belgenin oluşturulduğu yerdekinden farklı olabilir. “Yazı Tipi Ekle…” onu yükler.
 	…and {count} more	…ve {count} tane daha
+	Missing Fonts	Eksik Yazı Tipleri
+	Every font the document shows is installed	Belgede gösterilen tüm yazı tipleri yüklü
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Yüklü olmayan yazı tipleri aynı ölçülerdeki yazı tipleriyle gösteriliyor: satır sonları değişmez

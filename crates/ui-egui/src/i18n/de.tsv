@@ -2074,10 +2074,12 @@
 	Automatic ({region})	Automatisch ({region})
 	Search	Suchen
 	Title Bar	Titelleiste
-	Font Substitution…	Schriftartersetzung…
 	1 font not installed	1 Schriftart nicht installiert
 	{count} fonts not installed	{count} Schriftarten nicht installiert
 	Shown in substitute fonts. Click for details.	In Ersatzschriftarten angezeigt. Für Details klicken.
 	Not installed — shown as	Nicht installiert — angezeigt als
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} ist auf diesem Computer nicht installiert, daher wird der Text in {shown} angezeigt. Zeilenumbrüche und Seitenzahl können von denen abweichen, wo das Dokument erstellt wurde. „Schriftart hinzufügen…“ installiert sie.
 	…and {count} more	…und {count} weitere
+	Missing Fonts	Fehlende Schriftarten
+	Every font the document shows is installed	Alle im Dokument angezeigten Schriftarten sind installiert
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Nicht installierte Schriftarten werden in gleich breiten Schriftarten angezeigt: Zeilenumbrüche bleiben gleich

@@ -2441,10 +2441,12 @@ preview	Title	Título
 	Start-up	Inicio de la aplicación
 	Show the Start screen when WordCraft starts	Mostrar la pantalla de inicio al abrir WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Activado: WordCraft se abre en Archivo › Inicio, con un documento en blanco, las plantillas y tus documentos recientes. Desactivado: abre un documento en blanco.
-	Font Substitution…	Sustitución de fuentes…
 	1 font not installed	1 fuente no instalada
 	{count} fonts not installed	{count} fuentes no instaladas
 	Shown in substitute fonts. Click for details.	Se muestran con fuentes sustitutas. Haga clic para ver los detalles.
 	Not installed — shown as	No instalada — se muestra como
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} no está instalada en este equipo, por lo que su texto se muestra en {shown}. Los saltos de línea y el número de páginas pueden diferir de donde se creó el documento. «Agregar fuente…» la instala.
 	…and {count} more	…y {count} más
+	Missing Fonts	Fuentes que faltan
+	Every font the document shows is installed	Todas las fuentes que muestra el documento están instaladas
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	Las fuentes no instaladas se muestran con fuentes de las mismas medidas: los saltos de línea no cambian

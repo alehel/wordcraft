@@ -2459,10 +2459,12 @@ preview	Title	Esempio
 	Automatic ({region})	Automatico ({region})
 	Search	Cerca
 	Title Bar	Barra del titolo
-	Font Substitution…	Sostituzione tipi di carattere…
 	1 font not installed	1 tipo di carattere non installato
 	{count} fonts not installed	{count} tipi di carattere non installati
 	Shown in substitute fonts. Click for details.	Visualizzati con tipi di carattere sostitutivi. Fai clic per i dettagli.
 	Not installed — shown as	Non installato — visualizzato come
 	{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it.	{font} non è installato su questo computer, quindi il suo testo è visualizzato in {shown}. Le interruzioni di riga e il numero di pagine possono differire da dove è stato creato il documento. «Aggiungi carattere…» lo installa.
 	…and {count} more	…e altri {count}
+	Missing Fonts	Tipi di carattere mancanti
+	Every font the document shows is installed	Tutti i tipi di carattere mostrati dal documento sono installati
+	Fonts that aren't installed are shown in fonts that measure the same: line breaks don't move	I tipi di carattere non installati sono mostrati con tipi delle stesse misure: le interruzioni di riga non cambiano
