@@ -50,8 +50,17 @@ pub fn autocorrect_word(s: &mut Session, on_enter: bool) -> Result<(), CmdError>
     });
     let lang = lang.or_else(|| s.editing_lang.clone());
     let turkic = is_turkic(lang.as_deref());
+    // Proofing decides what is English the same way (#835); every English (en-GB, en-CA…) counts
+    // (#1281).
+    let proof = wordcraft_proof::ProofLang::from_tag(lang.as_deref());
+    let english = proof.is_english();
+    // Word fixes TWo INitial CApitals only into a word it knows: one its spelling check accepts
+    // ("HEllo" → "Hello") or a replacement's typo ("TEh" → "Teh" → "The"). "DMs", "PDfs" and
+    // "HEllox" stay as typed (#4248). A language without a dictionary accepts every word.
+    let spelling = s.prefs.spelling();
+    let known = |w: &str| wordcraft_proof::is_correct_in_with(w, proof, &spelling) || (ac.replace_text && ac.replacement_in(w, english).is_some());
     // TWo INitial CApitals and cAPS LOCK come first, so "TEh" is still a replacement's typo.
-    if let Some((at, reps)) = case_fix(&ac, &word, turkic) {
+    if let Some((at, reps)) = case_fix(&ac, &word, turkic, &known) {
         let para = s.doc.para_mut(f.story, &f.path)?;
         let letters = word.get(at..).unwrap_or("").chars().take(reps.len()).collect::<String>();
         let mut end = start + at + letters.len();
@@ -81,9 +90,7 @@ pub fn autocorrect_word(s: &mut Session, on_enter: bool) -> Result<(), CmdError>
         s.sel = Selection::caret(f.clone());
         word = format!("{}{fixed}{}", word.get(..at).unwrap_or(""), word.get(at + letters.len()..).unwrap_or(""));
     }
-    // A whole-word replacement, else "wait..." → "wait…". Proofing decides what is English the
-    // same way (#835); every English (en-GB, en-CA…) counts (#1281).
-    let english = s.doc.para_at(&f).is_none_or(|_| wordcraft_proof::ProofLang::from_tag(lang.as_deref()).is_english());
+    // A whole-word replacement, else "wait..." → "wait…".
     let found = if ac.replace_text { ac.replacement_in(&word, english) } else { None };
     let (from, rep) = match found {
         Some(r) => (start, Some(r)),
@@ -229,8 +236,9 @@ const CAPS_LOCK_EXCEPTIONS: &[&str] = &["iOS", "mRNA", "tRNA", "rRNA", "cDNA", "
 
 /// The capitalisation fix for a finished word: TWo INitial CApitals ("WOrd" → "Word") or cAPS
 /// LOCK ("wORD" → "Word"). Returns the byte offset of the word's letters and each letter's
-/// replacement. Only words of three or more letters, optionally in quotes or brackets.
-fn case_fix(caps: &AutoCorrectPrefs, word: &str, turkic: bool) -> Option<(usize, Vec<String>)> {
+/// replacement. Only words of three or more letters, optionally in quotes or brackets. A TWo
+/// INitial CApitals fix is made only when `known` accepts the fixed word.
+fn case_fix(caps: &AutoCorrectPrefs, word: &str, turkic: bool, known: &dyn Fn(&str) -> bool) -> Option<(usize, Vec<String>)> {
     if !caps.two_initial_caps && !caps.caps_lock {
         return None;
     }
@@ -255,7 +263,8 @@ fn case_fix(caps: &AutoCorrectPrefs, word: &str, turkic: bool) -> Option<(usize,
         && !INITIAL_CAPS_EXCEPTIONS.contains(&letters)
         && !caps.initial_caps_exceptions.iter().any(|e| e == letters)
     {
-        return Some((at, std::iter::once(one(a)).chain(std::iter::once(lower(b))).chain(more.iter().map(|&c| one(c))).collect()));
+        let reps: Vec<String> = std::iter::once(one(a)).chain(std::iter::once(lower(b))).chain(more.iter().map(|&c| one(c))).collect();
+        return known(&reps.concat()).then_some((at, reps));
     }
     if caps.caps_lock && a.is_lowercase() && b.is_uppercase() && more.iter().all(|c| c.is_uppercase()) && !CAPS_LOCK_EXCEPTIONS.contains(&letters) {
         let up = upper_char(a, turkic);

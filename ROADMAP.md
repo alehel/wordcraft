@@ -153,6 +153,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 - 2026-10-25: Interface catalogs are still the shared storytold/craft-i18n ones embedded from `craft-i18n.rev` (`9205108c…`): 27 WordCraft languages with English fallback for missing strings, and the equation “Delete Around Caret in Equation” translation preserved. Native-speaker review remains human.
 - 2026-10-25: Input methods (egui 0.37): character- and byte-counted surrounding deletions, a fresh composition after body/equation replacement, rejection of queued stale replacements before mutation, transactional equation deletes and one undo group, with tracked and placeholder length mapping. Synthetic regressions document these paths; managed CI passed, and native IME acceptance (#155–#164) plus browser IME behavior remain open.
 - 2026-10-25: Text Highlight Color shows the last colour as the button's bar in the ribbon and mini toolbar; after No Color it shows the pen without a misleading yellow bar, and the button removes highlighting (#4087).
+- 2026-10-28: AutoCorrect's TWo INitial CApitals fixes a word only when the spelling check of its language accepts the fixed word or the replacement list has it, as Word for Windows does, so `DMs`, `MBps` and `PDfs` stay as typed while `THe` and `HEllo` are still fixed (#4248).
 - 2026-10-23: cu20we: DrawingML flat, square and round line caps are imported, saved, displayed and exported to PDF; absent or unknown caps default to flat. VML end caps (including shapetype inheritance) are preserved through DOCX save. Ink and metafile stroke handling remain separate. Synthetic DOCX, raster and PDF regressions cover the change; no new native Word comparison.
 - 2026-10-23: cu20we: paragraph-relative box floats start above effective space before; header, footer, cell and text-box layout regressions pass. Framed paragraph positioning is unchanged; no new native Word comparison.
 - 2026-10-23: AutoFormat As You Type: `*Bold* and _italic_ as real formatting`. With the option on, `*word*` typed and finished becomes bold and `_word_` italic, without the marks. It is off by default (`tools.autocorrect {"boldItalic"}`).
@@ -652,6 +653,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 |---|---|---|
 | 2026-10-29 | trivial | Progress log: documents with links print (#4734) |
 | 2026-10-29 | minor | Oversized automatic/minimum-height cantSplit rows start on a fresh page and continue without clipping (#4736); fitting rows, repeated header rows and exact-height clipping retain their contracts. Native synthetic Word Mac 16.114.2 reference; readiness estimates unchanged. |
+| 2026-10-28 | trivial | Progress log: TWo INitial CApitals fixes only into a known word (#4248) |
 | 2026-10-22 | trivial | Progress log: one native window per open document |
 | 2026-10-22 | trivial | Progress log: every open document keeps its own recovery copy |
 | 2026-10-22 | trivial | Progress log: several open documents in the desktop window |
