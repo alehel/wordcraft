@@ -184,6 +184,13 @@ pub(crate) fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc
                 .rows
                 .get(ri)
                 .is_some_and(|r| r.props.cant_split || (r.props.height_rule == HeightRule::Exact && r.props.height.is_some_and(|h| h > 0.0)));
+        // Word for Mac 16.114.2 keeps cantSplit rows whole when they fit on a fresh page,
+        // but continues an oversized automatic/minimum-height row from there (#4736).
+        // Repeated header rows and explicitly exact heights keep their existing contracts.
+        let oversized_cant_split = !header_rows.contains(&ri)
+            && t.rows
+                .get(ri)
+                .is_some_and(|r| r.props.cant_split && !(r.props.height_rule == HeightRule::Exact && r.props.height.is_some_and(|h| h > 0.0)));
         let mut rest: Option<table::RowLayout> = None;
         // On a new page holding only the repeated header rows.
         let mut fresh = false;
@@ -216,7 +223,8 @@ pub(crate) fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc
             // is above it on this page (moving on would gain nothing).
             let room = pb.bottom - pb.y;
             let moves_on = rest.is_none() && !pb.at_top() && !fresh && !under_top_headers && short_of_min(ri, room);
-            let split = if splittable && !moves_on && !defer_kept { table::split_row(cur, room) } else { None };
+            let can_split = splittable || (oversized_cant_split && (pb.at_top() || fresh));
+            let split = if can_split && !moves_on && !defer_kept { table::split_row(cur, room) } else { None };
             match split {
                 Some((a, b)) => {
                     place(pb, &a);

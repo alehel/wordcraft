@@ -155,6 +155,69 @@ fn export_escapes_round_trip() {
 }
 
 #[test]
+fn export_emphasis_next_to_punctuation_round_trips() {
+    let marks: [(&str, fn(&mut Fmt)); 3] = [("bold", |f| f.bold = true), ("italic", |f| f.italic = true), ("strike", |f| f.strike = true)];
+    let cases: [&[(&str, bool)]; 4] = [
+        &[("注意：", true), ("请阅读", false)],
+        &[("a.", true), ("b", false)],
+        &[("a", false), ("!", true), ("b", false)],
+        &[("a", false), ("(x)", true), ("b", false)],
+    ];
+    for (name, set) in marks {
+        for runs in cases {
+            let mut p = Para::default();
+            for (t, on) in runs {
+                let mut f = Fmt::default();
+                if *on {
+                    set(&mut f);
+                }
+                p.push_text(t, &f);
+            }
+            let md = inlines_md(&p.inlines);
+            let back = parse(&md);
+            let FBlock::Para(q) = &back.blocks[0] else { panic!() };
+            let want: String = runs.iter().map(|r| r.0).collect();
+            assert_eq!(q.text(), want, "{name} exported as {md:?}");
+            let got: Vec<(String, bool)> = q
+                .inlines
+                .iter()
+                .filter_map(|i| if let Inline::Text(t, f) = i { Some((t.clone(), f.bold || f.italic || f.strike)) } else { None })
+                .collect();
+            let expect: Vec<(String, bool)> = runs.iter().map(|(t, on)| (t.to_string(), *on)).collect();
+            assert_eq!(got, expect, "{name} exported as {md:?}");
+        }
+    }
+}
+
+#[test]
+fn export_adjacent_emphasis_next_to_punctuation_round_trips() {
+    let b = Fmt { bold: true, ..Fmt::default() };
+    let i = Fmt { italic: true, ..Fmt::default() };
+    let s = Fmt { strike: true, ..Fmt::default() };
+    let cases: [&[(&str, &Fmt)]; 6] = [
+        &[("ab", &b), ("!c", &i)],
+        &[("ab", &i), ("!c", &b)],
+        &[("ab", &b), ("!c", &s)],
+        &[("ab", &s), ("(c)", &b)],
+        &[("a.", &b), ("b", &i)],
+        &[("a.", &b), ("!b", &i)],
+    ];
+    for runs in cases {
+        let mut p = Para::default();
+        for (t, f) in runs {
+            p.push_text(t, f);
+        }
+        let md = inlines_md(&p.inlines);
+        let back = parse(&md);
+        let FBlock::Para(q) = &back.blocks[0] else { panic!() };
+        let got: Vec<(String, bool, bool, bool)> =
+            q.inlines.iter().filter_map(|x| if let Inline::Text(t, f) = x { Some((t.clone(), f.bold, f.italic, f.strike)) } else { None }).collect();
+        let expect: Vec<(String, bool, bool, bool)> = runs.iter().map(|(t, f)| (t.to_string(), f.bold, f.italic, f.strike)).collect();
+        assert_eq!(got, expect, "exported as {md:?}");
+    }
+}
+
+#[test]
 fn escape_line_start_preserves_indentation() {
     assert_eq!(escape_line_start("   indented text".to_string()), "   indented text");
     assert_eq!(escape_line_start("   # not a heading".to_string()), "   \\# not a heading");
@@ -584,4 +647,26 @@ fn exported_link_destinations_read_back_unchanged() {
     assert_eq!(md("https://example.com/a?b=1&c=2"), "[x](https://example.com/a?b=1&c=2)");
     assert_eq!(md("https://example.com/a b"), "[x](<https://example.com/a b>)");
     assert_eq!(md("https://e.com/x\ny"), "[x](https://e.com/xy)");
+}
+
+#[test]
+fn heading_trailing_hash_survives_round_trip() {
+    let heading = |md: &str| {
+        let f = parse(md);
+        let Some(FBlock::Para(p)) = f.blocks.first() else { panic!("no paragraph in {md:?}") };
+        assert_eq!(p.kind, Kind::Heading(2), "{md:?}");
+        p.text()
+    };
+    for (src, text, want) in [
+        ("## Item \\#\n", "Item #", "## Item \\#\n"),
+        ("## Issue \\##\n", "Issue ##", "## Issue \\##\n"),
+        ("## \\#\n", "#", "## \\#\n"),
+        ("## C#\n", "C#", "## C#\n"),
+    ] {
+        assert_eq!(heading(src), text, "{src:?}");
+        let md = export(&import(src));
+        assert_eq!(md, want, "first export of {src:?}");
+        assert_eq!(heading(&md), text, "md was {md:?}");
+        assert_eq!(export(&import(&md)), want, "second export of {src:?}");
+    }
 }

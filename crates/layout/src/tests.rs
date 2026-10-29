@@ -15,6 +15,7 @@ mod nbsp;
 mod numeral;
 mod pages;
 mod styleref;
+mod table_cant_split;
 mod table_contact;
 mod textbox;
 mod vertical;
@@ -1608,6 +1609,54 @@ fn right_tab_whose_text_does_not_fit_moves_to_the_next_line_with_it() {
     }
 }
 
+/// A TOC entry with a right indent and its right tab at the margin, past the indent (Word's TOC
+/// styles): the page number may end past the indent, up to the stop. Like Word, the number stays
+/// on the text's line whenever it fits between the text and the stop, also when the text ends
+/// less than a digit short of the indent; when it doesn't fit there, the tab and the number go
+/// to the next line as before.
+#[test]
+fn right_tab_past_the_right_indent_takes_its_number_up_to_the_stop() {
+    use wordcraft_doc::props::{TabAlign, TabLeader, TabStop};
+    let stop = 72.0 + 468.0;
+    let mut close = 0;
+    for indent in [28.35f32, 6.0] {
+        let edge = stop - indent;
+        for m in 20..40 {
+            for r in 2..7 {
+                let text = format!("{}{}\t104", "abc ".repeat(m), "y".repeat(r));
+                let n = text.chars().count();
+                let tab = n - 4;
+                let mut d = Document::from_text(&text);
+                d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| {
+                    p.indent_right = Some(indent);
+                    p.tabs = Some(vec![TabStop { pos: 468.0, align: TabAlign::Right, leader: TabLeader::Dot }]);
+                })
+                .unwrap();
+                let l = lay(&d);
+                let Some(para) = l.pages[0].items.iter().find_map(|i| if let Placed::Lines { para, .. } = i { Some(para.clone()) } else { None })
+                else {
+                    panic!("no lines")
+                };
+                let line_of = |k: usize| para.lines.iter().position(|l| l.c0 <= k && k < l.c1).unwrap();
+                // Where the text ends and how wide the number is (the text's last letter and the number
+                // are each on one line; the last two letters are both a "y").
+                let last = l.caret(&Pos::body(0, tab - 1)).unwrap().x;
+                let text_end = last + (last - l.caret(&Pos::body(0, tab - 2)).unwrap().x);
+                let end = l.caret(&Pos::body(0, n)).unwrap().x;
+                let number = end - l.caret(&Pos::body(0, n - 3)).unwrap().x;
+                assert!((end - stop).abs() < 0.5, "indent {indent}, {m} words + {r}: number ends at {end}");
+                assert_eq!(line_of(tab), line_of(n - 1), "indent {indent}, {m} words + {r}: the tab and its number are on different lines");
+                let same = line_of(tab) == line_of(tab - 1);
+                assert_eq!(same, text_end + number <= stop + 0.01, "indent {indent}, {m} words + {r}: text ends at {text_end}, number {number} wide");
+                if same && text_end > edge - number / 3.0 {
+                    close += 1;
+                }
+            }
+        }
+    }
+    assert!(close > 0, "no entry whose text ends within a digit of the indent");
+}
+
 /// A left tab whose only stop is past the right indent wraps; on the next line it still can't
 /// reach that stop, so it takes no room there and its text starts at the indent instead of
 /// going to a line of its own.
@@ -1727,6 +1776,50 @@ fn break_only_list_has_no_label() {
             "{kind:?}"
         );
     }
+}
+
+/// #4828: a list item deleted whole (its text and its mark) under Track Changes shows its number
+/// as deleted text, in the deletion's colour and struck through, with markup shown; without
+/// markup the number is drawn no more than the text.
+#[test]
+fn a_deleted_list_items_number_is_drawn_as_deleted_text() {
+    let mut d = Document::from_text("Intro\nChapter two\nBody");
+    d.revisions.push(wordcraft_doc::Revision {
+        kind: wordcraft_doc::RevisionKind::Delete,
+        author: "Ana".into(),
+        date: String::new(),
+        move_name: None,
+    });
+    let id = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    d.format_paragraphs(&Pos::body(1, 0), &Pos::body(1, 3), &|p| p.numbering = Some(wordcraft_doc::props::NumRef { num: id, level: 0 })).unwrap();
+    d.format_range(&Pos::body(1, 0), &Pos::body(1, 11), &|c| c.del = Some(0)).unwrap();
+    d.para_mut(StoryRef::Body, &Path::top(1)).unwrap().mark.del = Some(0);
+    let l = lay(&d);
+    let draws = |markup: bool| display::page_display(&d, &l.pages[0], &display::DisplayOptions { markup, ..Default::default() });
+    let glyph_color = |items: &[display::Draw], want: &str| {
+        items.iter().find_map(|i| match i {
+            display::Draw::Glyphs { text, color, glyphs, .. } if text.contains(want) => Some((*color, glyphs.first().map_or(0.0, |g| g.1))),
+            _ => None,
+        })
+    };
+    let marked = draws(true);
+    let (number, nx) = glyph_color(&marked, "1.").expect("the number is drawn with markup");
+    let (text, _) = glyph_color(&marked, "Chapter").expect("the deleted text is drawn with markup");
+    assert_eq!(number, text, "the number takes the deletion's colour");
+    let struck = marked
+        .iter()
+        .any(|i| matches!(i, display::Draw::Line { x0, x1, y0, y1, .. } if (y0 - y1).abs() < 0.01 && *x0 <= nx + 0.01 && *x1 > nx + 1.0));
+    assert!(struck, "the number is struck through");
+    // Without markup neither the text nor its number is drawn.
+    let plain = draws(false);
+    assert!(glyph_color(&plain, "Chapter").is_none() && glyph_color(&plain, "1.").is_none());
+    // A number whose paragraph mark isn't deleted is drawn as before.
+    let mut kept = Document::from_text("Intro\nChapter two\nBody");
+    let id = kept.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    kept.format_paragraphs(&Pos::body(1, 0), &Pos::body(1, 3), &|p| p.numbering = Some(wordcraft_doc::props::NumRef { num: id, level: 0 })).unwrap();
+    let kl = lay(&kept);
+    let plain = display::page_display(&kept, &kl.pages[0], &display::DisplayOptions { markup: false, ..Default::default() });
+    assert!(glyph_color(&plain, "1.").is_some());
 }
 
 #[test]
@@ -4815,10 +4908,95 @@ fn line_spacing_does_not_scale_pictures() {
     let l = lay(&d);
     let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
     let line = &para.lines[0];
-    let desc = para.styles[0].descent;
-    // Word: the picture plus the font's descent, not (picture + descent) x 1.15.
-    assert!((line.height - (144.0 + desc)).abs() < 0.01, "line {} for a 144pt picture (descent {desc})", line.height);
+    let st = &para.styles[0];
+    // Word: the picture plus 0.15 of the paragraph mark's natural height, not (picture + descent)
+    // x 1.15, and not the descent either (Word for Mac 16.93: 1.9pt under a 2cm picture, 11pt Cambria).
+    let want = 144.0 + 0.15 * (st.ascent + st.descent);
+    assert!((line.height - want).abs() < 0.01, "line {} for a 144pt picture, want {want}", line.height);
     assert!((line.baseline - line.top - 144.0).abs() < 0.01, "the picture stands on the baseline");
+}
+
+#[test]
+fn a_picture_line_in_multiple_spacing_takes_the_leading_of_its_text_or_the_paragraph_mark() {
+    // Word for Mac 16.93, a 2cm picture at double spacing: alone on its line it gets the
+    // paragraph mark's natural height below it, whatever its own run's size (20pt run, 8pt mark:
+    // 9.2pt); next to text, the text's descent and natural height (20pt Arial: 4.2 + 23pt).
+    use wordcraft_doc::CharProps;
+    use wordcraft_doc::props::LineSpacing;
+    let pic = 56.7;
+    let size = |pt: f32| CharProps { size: Some(pt), ..Default::default() };
+    let para = |m: f32, mark: f32, picture_run: Option<f32>, text: Option<f32>| {
+        let mut p = wordcraft_doc::Paragraph::with_text(if text.is_some() { "x" } else { "" }, size(text.unwrap_or(mark)));
+        p.mark = size(mark);
+        p.props.line_spacing = Some(LineSpacing::Multiple(m));
+        p.props.space_before = Some(0.0);
+        p.props.space_after = Some(0.0);
+        if let Some(run) = picture_run {
+            p.insert_object(0, picture(40.0, pic, Default::default()), &size(run)).unwrap();
+        }
+        wordcraft_doc::para_block(p)
+    };
+    let mut d = Document::from_text("");
+    d.body = vec![
+        para(1.0, 8.0, None, Some(8.0)),
+        para(1.0, 8.0, None, Some(20.0)),
+        para(2.0, 8.0, Some(20.0), None),
+        para(2.0, 8.0, Some(14.0), Some(20.0)),
+    ];
+    let l = lay(&d);
+    let lines: Vec<crate::para::Line> =
+        l.pages[0].items.iter().filter_map(|i| if let Placed::Lines { para, l0, .. } = i { Some(para.lines[*l0].clone()) } else { None }).collect();
+    let (small, big) = (&lines[0], &lines[1]);
+    let alone = lines[2].height;
+    assert!((alone - (pic + small.height)).abs() < 0.01, "alone: {alone}, want {pic} + the 8pt mark's {}", small.height);
+    let beside = lines[3].height;
+    let want = pic + big.text_desc + big.height;
+    assert!((beside - want).abs() < 0.01, "next to 20pt text: {beside}, want {want}");
+    assert!((lines[3].baseline - lines[3].top - pic).abs() < 0.01, "the picture stands at the line top");
+}
+
+#[test]
+fn a_picture_in_one_and_a_half_spacing_takes_the_texts_leading_and_fits_at_the_page_bottom() {
+    // Word for Windows (a 472pt picture in 1.5-spaced 12pt text): the line is the picture plus
+    // half the text's natural height, and at the foot of a page the picture only has to fit above
+    // the bottom margin: it stayed with 1.7pt to spare, less than the descent.
+    use wordcraft_doc::props::LineSpacing;
+    let pic = 400.0;
+    let doc = |spare: f32| {
+        let mut d = Document::from_text("Text");
+        let s = d.last_section.clone();
+        let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+        p.props.line_spacing = Some(LineSpacing::Exactly(20.0));
+        p.props.space_before = Some(0.0);
+        p.props.space_after = Some(s.page_h - s.margin_bottom - s.margin_top - 20.0 - pic - spare);
+        let mut q = wordcraft_doc::Paragraph::with_text("", Default::default());
+        q.props.line_spacing = Some(LineSpacing::Multiple(1.5));
+        q.props.space_before = Some(0.0);
+        q.insert_object(0, picture(100.0, pic, Default::default()), &Default::default()).unwrap();
+        d.body.push(wordcraft_doc::para_block(q));
+        d
+    };
+    let l = lay(&doc(1.0));
+    let lines = |l: &DocLayout, page: usize| {
+        l.pages[page]
+            .items
+            .iter()
+            .filter_map(|i| if let Placed::Lines { para, l0, .. } = i { Some((para.clone(), *l0)) } else { None })
+            .collect::<Vec<_>>()
+    };
+    let on_first = lines(&l, 0);
+    let Some((para, l0)) = on_first.iter().find(|(p, _)| !p.lines.is_empty() && p.lines[0].text_asc >= pic) else {
+        panic!("the picture should stay on page 1 ({} pages)", l.pages.len())
+    };
+    let line = &para.lines[*l0];
+    let st = &para.styles[para.clusters[0].style as usize];
+    assert!(st.descent > 1.0, "the spare room is under the descent");
+    let want = pic + 0.5 * (st.ascent + st.descent);
+    assert!((line.height - want).abs() < 0.01, "line {} for a {pic}pt picture, want {want}", line.height);
+    assert!((line.baseline - line.top - pic).abs() < 0.01, "the picture stands at the line top");
+    // A picture that ends past the margin still goes to the next page.
+    let l = lay(&doc(-0.5));
+    assert!(!lines(&l, 0).iter().any(|(p, _)| p.lines.first().is_some_and(|x| x.text_asc >= pic)), "the picture should move on");
 }
 
 #[test]
@@ -4869,8 +5047,10 @@ fn list_label_does_not_inflate_an_inline_picture_floor() {
         let l = lay(&d);
         let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
         let line = &para.lines[0];
-        let desc = para.styles[para.clusters[0].style as usize].descent;
-        assert!((line.height - (144.0 + desc)).abs() < 0.01, "{spacing:?}: {}", line.height);
+        let st = &para.styles[para.clusters[0].style as usize];
+        // Under the picture: the descent, or the text's own multiple leading when larger.
+        let below = if let LineSpacing::Multiple(m) = spacing { st.descent.max((m - 1.0) * (st.ascent + st.descent)) } else { st.descent };
+        assert!((line.height - (144.0 + below)).abs() < 0.01, "{spacing:?}: {}", line.height);
         assert!((line.baseline - line.top - 144.0).abs() < 0.01);
     }
 }
@@ -11898,4 +12078,24 @@ fn an_empty_bulleted_mark_after_a_bulleted_section_closer_draws_no_bullet() {
             .any(|it| matches!(it, Placed::Lines { path, para, .. } if *path == Path::top(filler) && para.label.is_some()));
         assert!(text, "{filler} lines above: the text closer keeps its bullet");
     }
+}
+
+#[test]
+fn a_list_item_that_shows_nothing_reports_no_missing_font() {
+    // Its number is shaped in its mark's font before the paragraph turns out to show nothing
+    // (#3982): that font isn't shown in another, so it isn't missing from what's drawn.
+    let mut d = Document::from_text("Alpha\n\nBeta");
+    let id = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(2, 4), &|p| {
+        p.numbering = Some(wordcraft_doc::props::NumRef { num: id, level: 0 });
+    })
+    .unwrap();
+    let mark = &mut d.para_mut(StoryRef::Body, &Path::top(1)).unwrap().mark;
+    mark.font = Some("Wordcraft Gone Number Face".into());
+    let missing = |d: &Document| layout(d, &mut LayoutCache::new(), &LayoutOptions::default()).substituted_fonts();
+    let shown = missing(&d);
+    assert!(shown.iter().any(|(f, _)| f == "Wordcraft Gone Number Face"), "a shown number counts: {shown:?}");
+    d.para_mut(StoryRef::Body, &Path::top(1)).unwrap().mark.hidden = Some(true);
+    let gone = missing(&d);
+    assert!(!gone.iter().any(|(f, _)| f == "Wordcraft Gone Number Face"), "{gone:?}");
 }

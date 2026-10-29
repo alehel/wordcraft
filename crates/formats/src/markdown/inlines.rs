@@ -16,7 +16,7 @@ enum Node {
     Delim { ch: char, orig: usize, left: usize, open: bool, close: bool, opens: Vec<Emph>, closes: Vec<Emph> },
 }
 
-fn is_punct(c: char) -> bool {
+pub(super) fn is_punct(c: char) -> bool {
     c.is_ascii_punctuation() || (!c.is_alphanumeric() && !c.is_whitespace() && !c.is_control())
 }
 

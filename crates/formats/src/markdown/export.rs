@@ -1,5 +1,5 @@
 use super::blocks::thematic_break;
-use super::inlines::within;
+use super::inlines::{is_punct, within};
 use super::{Align, Arc, Cell, Document, FBlock, FTable, Fmt, Inline, Kind, model};
 
 // ---------------------------------------------------------------------------------------------
@@ -166,30 +166,43 @@ fn inlines_md_impl(inlines: &[Inline], in_table: bool) -> String {
         }
         let want: Vec<Mark> =
             [(f.bold, Mark::Bold), (f.italic, Mark::Italic), (f.strike, Mark::Strike)].iter().filter(|x| x.0).map(|x| x.1).collect();
+        let body = if f.code {
+            if in_table { code_span(&text.replace('|', "\\|")) } else { code_span(&text) }
+        } else {
+            escape(&text).replace('\n', "\\\n").replace('\t', "    ")
+        };
         // Close until the stack is a prefix of what we want.
+        let mut close = String::new();
         while let Some(pos) = stack.iter().position(|m| !want.contains(m)) {
             while stack.len() > pos {
                 if let Some(m) = stack.pop() {
-                    out.push_str(marker(m));
+                    close.push_str(marker(m));
                 }
             }
         }
+        let mut open = String::new();
         for m in want {
             if !stack.contains(&m) {
-                out.push_str(marker(m));
+                open.push_str(marker(m));
                 stack.push(m);
             }
         }
-        if f.code {
-            if in_table {
-                let t = text.replace('|', "\\|");
-                out.push_str(&code_span(&t));
-            } else {
-                out.push_str(&code_span(&text));
-            }
-        } else {
-            out.push_str(&escape(&text).replace('\n', "\\\n").replace('\t', "    "));
+        // CommonMark only reads a closing run after punctuation as closing when whitespace or
+        // punctuation follows it, and an opening run before punctuation as opening when whitespace
+        // or punctuation precedes it. Where a letter sits there instead, or an opening run would
+        // directly follow a closing run (the two would merge into one run), an empty HTML comment (which readers drop) supplies
+        // the punctuation.
+        let prev = out.chars().next_back();
+        let next = body.chars().next();
+        let word = |c: Option<char>| c.is_some_and(|c| !c.is_whitespace() && !is_punct(c));
+        out.push_str(&close);
+        let close_needs = !close.is_empty() && prev.is_some_and(is_punct) && (!open.is_empty() || word(next));
+        let open_needs = !open.is_empty() && next.is_some_and(is_punct) && (!close.is_empty() || word(prev));
+        if close_needs || open_needs {
+            out.push_str(EMPTY_COMMENT);
         }
+        out.push_str(&open);
+        out.push_str(&body);
     }
     close_all(&mut out, &mut stack);
     if let Some(l) = &link {
@@ -228,6 +241,9 @@ fn entity_like(rest: &str) -> bool {
     let body = body.strip_prefix('#').map_or(body, |n| n.strip_prefix(['x', 'X']).unwrap_or(n));
     !body.is_empty() && body.chars().all(|c| c.is_ascii_alphanumeric())
 }
+
+/// Inline HTML that Markdown readers drop, used to separate emphasis markers from letters.
+const EMPTY_COMMENT: &str = "<!-- -->";
 
 fn marker(m: Mark) -> &'static str {
     match m {
@@ -297,6 +313,18 @@ pub fn export(doc: &Document) -> String {
     }
     if !s.ends_with('\n') {
         s.push('\n');
+    }
+    s
+}
+
+/// A heading's text on one line, with a trailing run of '#' escaped so a reader does not take it
+/// for the optional closing sequence (`## Item #` reads back as "Item").
+fn heading_text(body: &str) -> String {
+    let mut s = body.replace("\\\n", " ");
+    let t = s.trim_end();
+    let core = t.trim_end_matches('#');
+    if core.len() != t.len() && (core.is_empty() || core.ends_with([' ', '\t'])) {
+        s.insert(core.len(), '\\');
     }
     s
 }
@@ -374,8 +402,8 @@ pub(super) fn write_blocks(blocks: &[FBlock], out: &mut Vec<String>) {
                     None => {
                         prev_list = false;
                         let line = match p.kind {
-                            Kind::Heading(n) => format!("{} {}", "#".repeat(n.clamp(1, 6) as usize), body.replace("\\\n", " ")),
-                            Kind::Title => format!("# {}", body.replace("\\\n", " ")),
+                            Kind::Heading(n) => format!("{} {}", "#".repeat(n.clamp(1, 6) as usize), heading_text(&body)),
+                            Kind::Title => format!("# {}", heading_text(&body)),
                             Kind::Rule => "---".to_string(),
                             Kind::Quote => {
                                 let b = escape_lines(body);

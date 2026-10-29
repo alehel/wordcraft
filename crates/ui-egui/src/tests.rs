@@ -613,6 +613,10 @@ fn start_screen_shows_file_home_and_esc_leaves_no_document() {
     let refused = a.run("ui.zotero.status", json!({})).unwrap_err();
     assert!(refused.contains("No document is open"), "refused before it runs: {refused}");
     assert!(works_without_document("font.add"), "a font file dropped on the empty window is added");
+    // #4585: File › Options › Proofing › AutoCorrect Options edits a user setting, not the document.
+    a.run("tools.autocorrect", json!({})).unwrap();
+    assert_eq!(a.dialog.as_ref().map(|d| d.name()), Some("autoCorrect"));
+    a.dialog = None;
     // Neither keys nor commands reach the hidden placeholder.
     assert!(a.run("text.insert", json!({"text": "Hello"})).is_err());
     assert!(a.execute("format.bold", json!({})).is_err());
@@ -3236,6 +3240,35 @@ fn the_print_button_shows_only_with_a_print_hook() {
     }
 }
 
+/// Return on the Print page prints, as in Word, where ⌘P opens on Print as the default
+/// button; the document isn't typed into.
+#[test]
+fn return_on_the_print_page_prints() {
+    let printed = std::rc::Rc::new(std::cell::Cell::new(0));
+    let mut a = app();
+    let seen = printed.clone();
+    a.services.print = Some(Box::new(move |_| {
+        seen.set(seen.get() + 1);
+        Ok(())
+    }));
+    let before = body_text(&a);
+    a.run("file.print", json!({})).unwrap();
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+        |ui, app: &mut WordApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        a,
+    );
+    h.run_steps(4);
+    assert_eq!(printed.get(), 0);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(printed.get(), 1, "Return printed once");
+    assert_eq!(body_text(h.state()), before, "the document is unchanged");
+}
+
 /// #2958: the Print button leads the settings, above the printer and the settings it prints
 /// with (as in Word), and it wears the accent the app gives a dialog's primary button, so the
 /// page's one action is found first and reads as one rather than as another setting.
@@ -3554,7 +3587,11 @@ fn clicks_on_ribbon_and_status_bar_chrome_keep_typing_in_the_document() {
     h.step();
     h.step();
     assert!(egui::Popup::is_any_open(&h.ctx), "the language menu opened");
-    let elsewhere = egui::pos2(lang.max.x + 40.0, lang.center().y);
+    // Bare status bar: past the language item, and past the missing-fonts item after it when the
+    // document's fonts aren't installed (Aptos Display for Heading 1, on most machines without
+    // Office), however many there are.
+    let right = h.query_by_label_contains(" not installed").map_or(lang.max.x, |n| n.rect().max.x);
+    let elsewhere = egui::pos2(right + 40.0, lang.center().y);
     for pressed in [true, false] {
         h.hover_at(elsewhere);
         h.event(egui::Event::PointerButton { pos: elsewhere, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });

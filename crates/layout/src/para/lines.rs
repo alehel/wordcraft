@@ -352,6 +352,7 @@ impl<'e> Breaker<'e> {
             baseline: v.baseline,
             text_asc: v.text_asc,
             text_desc: v.text_desc,
+            leading: v.leading,
             c0: sc.c0,
             c1,
             xs: sc.xs,
@@ -404,7 +405,7 @@ impl<'e> Breaker<'e> {
     /// tallest picture on it (which sits on the baseline).
     fn extents(&self, pl: &ParaLayout, (c0, c1): (usize, usize)) -> Extents {
         let rp = &self.rp;
-        let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0 };
+        let mut ex = Extents { asc: 0.0, desc: 0.0, obj_asc: 0.0, tasc: 0.0, tdesc: 0.0 };
         let mut any = false;
         let dropped = pl.drop_cap.map_or(0, |d| d.0);
         for (k, c) in pl.clusters.get(c0..c1).into_iter().flatten().enumerate() {
@@ -431,6 +432,8 @@ impl<'e> Breaker<'e> {
             } else {
                 // `obj_h` is set on text clusters only under ruby text, which the line grows to fit.
                 let (a, d) = st.line_extent();
+                ex.tasc = ex.tasc.max(a);
+                ex.tdesc = ex.tdesc.max(d);
                 (a.max(c.obj_h + st.shift), d)
             };
             ex.asc = ex.asc.max(a);
@@ -449,7 +452,7 @@ impl<'e> Breaker<'e> {
     /// The line's height, baseline and text extent.
     fn measure(&self, pl: &ParaLayout, range: (usize, usize)) -> Measure {
         let rp = &self.rp;
-        let Extents { mut asc, mut desc, obj_asc } = self.extents(pl, range);
+        let Extents { mut asc, mut desc, obj_asc, tasc, tdesc } = self.extents(pl, range);
         let text_natural = asc + desc;
         let (text_asc, text_desc) = (asc.max(obj_asc), desc);
         let text_pictures = if obj_asc > asc { obj_asc + desc } else { 0.0 };
@@ -475,12 +478,35 @@ impl<'e> Breaker<'e> {
         // no rule tried so far (none, only the text's descent) matched both; it needs Word probes.
         let natural = asc + desc;
         let pictures = if obj_asc > asc { obj_asc + desc } else { 0.0 };
+        // Below a picture taller than the text Word puts the multiple's leading, (m - 1) x the
+        // natural height, of the line's text after its descent, or of the paragraph mark's font
+        // alone on a line of only pictures, never of a picture's own run. Word for Mac 16.93,
+        // a 2cm picture: next to 14pt Times New Roman text at double spacing 3.0 + 16.1pt below it,
+        // under a default 11pt Cambria mark 12.9pt, in a 20pt Arial run under an 8pt Times New
+        // Roman mark 9.2pt; at 1.15 spacing 0.15 x 12.9pt, less than the descent. Word for
+        // Windows: a 472pt picture in 1.5-spaced 12pt text takes 478.3pt. (height, leading)
+        let multiple_pictures = match rp.line_spacing {
+            LineSpacing::Multiple(m) if text_pictures > 0.0 && m > 1.0 => {
+                let (below, leading) = if tasc + tdesc > 0.0 {
+                    let leading = (m - 1.0) * (tasc + tdesc);
+                    (tdesc + leading, leading)
+                } else {
+                    let natural = pl.styles.get(self.mark_style as usize).map_or(text_natural, |st| {
+                        let (a, d) = st.line_extent();
+                        a + d
+                    });
+                    ((m - 1.0) * natural, (m - 1.0) * natural)
+                };
+                Some((obj_asc + below, leading))
+            }
+            _ => None,
+        };
         // Document grid: the line takes whole line pitches, its text centred in them.
         let grid = self.grid.as_ref();
         let (height, centred) = match (rp.line_spacing, grid) {
             (LineSpacing::Multiple(m), Some(g)) => ((g.snap_height(natural) * m).max(g.snap_height(pictures)), true),
             (LineSpacing::AtLeast(v), Some(g)) => (g.snap_height(natural.max(pictures)).max(v), true),
-            (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures), false),
+            (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(multiple_pictures.map_or(text_pictures, |p| p.0)), false),
             (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
             (LineSpacing::Exactly(v), _) => (v, false),
         };
@@ -488,9 +514,20 @@ impl<'e> Breaker<'e> {
             let up = asc.max(obj_asc);
             self.top + ((height - up - desc) / 2.0).max(0.0) + up
         } else {
-            self.top + baseline_offset(rp.line_spacing, asc, height, desc).max(obj_asc.min(height - desc))
+            // A picture that sets the line's height under multiple spacing stands at its top: the
+            // room below it may be less than the descent.
+            let floor = if multiple_pictures.is_some_and(|p| height <= p.0) { obj_asc } else { obj_asc.min(height - desc) };
+            self.top + baseline_offset(rp.line_spacing, asc, height, desc).max(floor)
         };
-        Measure { height, baseline, text_asc, text_desc }
+        // Below a picture that sets the line's height the leading is the multiple's, as below text:
+        // Word keeps such a line on the page when the picture fits above the bottom margin (with
+        // 1.7pt to spare, under the descent, in the same document).
+        let leading = if let Some((h, lead)) = multiple_pictures.filter(|p| !centred && height <= p.0) {
+            lead.min(self.top + h - baseline).max(0.0)
+        } else {
+            (self.top + height - baseline - text_desc).max(0.0)
+        };
+        Measure { height, baseline, text_asc, text_desc, leading }
     }
 
     /// Alignment / justification of the line (trailing spaces hang).
@@ -567,12 +604,14 @@ impl<'e> Breaker<'e> {
         };
         let (width, x0) = (self.width, rp.indent_left);
         let (x0, left, right) = if self.rtl_para { (width - x0, width - self.base_right, width - x0) } else { (x0, x0, self.base_right) };
+        let below = if grid.is_some() { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) };
         self.lines.push(Line {
             top: self.top,
             height: h,
-            baseline: self.top + if grid.is_some() { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) },
+            baseline: self.top + below,
             text_asc: asc,
             text_desc: desc,
+            leading: (h - below - desc).max(0.0),
             c0: self.n,
             c1: self.n,
             xs: vec![x0],
@@ -634,6 +673,9 @@ struct Extents {
     asc: f32,
     desc: f32,
     obj_asc: f32,
+    /// The line's text alone, without its pictures' runs: the multiple's leading below a picture.
+    tasc: f32,
+    tdesc: f32,
 }
 
 /// A line's height and baseline, and the extent of its text.
@@ -642,6 +684,8 @@ struct Measure {
     baseline: f32,
     text_asc: f32,
     text_desc: f32,
+    /// Room at the bottom of the line below its text or picture (see `Line::leading`).
+    leading: f32,
 }
 
 /// Where the line's content ends: trailing spaces and markers hang.
@@ -777,19 +821,29 @@ impl Scan {
                 }
                 self.x += w;
             }
-            _ => self.pending_tab = Some((j, stop, self.x)),
+            _ => {
+                // Its room grows from nothing with its text (a tab moved on from the line before
+                // may still hold the width it had there).
+                if let Some(c) = pl.clusters.get_mut(j) {
+                    c.adv = 0.0;
+                }
+                self.pending_tab = Some((j, stop, self.x));
+            }
         }
         if stop.leader != TabLeader::None {
             self.leaders.push((j, stop.leader));
         }
     }
 
-    /// Whether text after a right/centre tab grows leftwards into the tab's space first.
+    /// Whether text after a right/centre tab grows leftwards into the tab's space first. Up to a
+    /// right or decimal stop it fits even past the right indent (Word: a TOC entry whose text ends
+    /// less than a digit short of the indent keeps its page number on its line when the stop is
+    /// at the margin); unshifted, the text after the tab ends at `x - room`.
     fn absorbs(&self, pl: &ParaLayout, advance: f32) -> bool {
         self.pending_tab.is_some_and(|(tj, stop, _)| {
             let room = pl.clusters.get(tj).map(|t| t.adv).unwrap_or(0.0);
             match stop.align {
-                TabAlign::Right | TabAlign::Decimal => room >= advance,
+                TabAlign::Right | TabAlign::Decimal => room >= advance || self.x - room + advance <= stop.pos + 0.01,
                 TabAlign::Center => room >= advance / 2.0 && self.x + advance / 2.0 <= self.right_edge + 0.01,
                 _ => false,
             }
@@ -842,7 +896,9 @@ impl Scan {
     /// Text after a decimal/centre/right tab shifts as it grows.
     fn shift_pending_tab(&mut self, pl: &mut ParaLayout) {
         let Some((tj, stop, tx)) = self.pending_tab else { return };
-        let seg_w = self.x - tx;
+        // `x` includes the room the tab has so far.
+        let old = pl.clusters.get(tj).map(|c| c.adv).unwrap_or(0.0);
+        let seg_w = self.x - tx - old;
         let shift = match stop.align {
             TabAlign::Right => stop.pos - tx - seg_w,
             TabAlign::Center => stop.pos - tx - seg_w / 2.0,
@@ -851,7 +907,6 @@ impl Scan {
             _ => 0.0,
         };
         let shift = shift.max(0.0);
-        let old = pl.clusters.get(tj).map(|c| c.adv).unwrap_or(0.0);
         if (shift - old).abs() > 0.001 {
             let delta = shift - old;
             if let Some(c) = pl.clusters.get_mut(tj) {

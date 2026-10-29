@@ -51,6 +51,26 @@ fn borderless_tables_export_without_cell_borders() {
 }
 
 #[test]
+fn input_newlines_preserve_preformatted_lines() {
+    for newline in ["\n", "\r\n", "\r"] {
+        let f = parse(&format!("<pre>{newline}  Alpha{newline}  <b>Beta</b>{newline}{newline}  Gamma</pre>"));
+        assert_eq!(texts(&f), ["CodeNone:  Alpha", "CodeNone:  Beta", "CodeNone:", "CodeNone:  Gamma"], "{newline:?}");
+        let FBlock::Para(p) = &f.blocks[1] else { panic!() };
+        assert!(matches!(p.inlines.last(), Some(Inline::Text(t, f)) if t == "Beta" && f.bold));
+    }
+}
+
+#[test]
+fn input_newlines_are_normalized_before_character_references() {
+    let f = parse("<p style='white-space:pre'>A&#13;B\r\nC\rD</p><p>A\r\nB\rC</p>");
+    assert_eq!(texts(&f), ["NormalNone:A\rB\nC\nD", "NormalNone:A B C"]);
+    let f = parse("<p style='white-space:pre-wrap'>α\r\r\nβ&#13;γ</p><a href='https://example.test/a\r\nb\rc&#13;d'>link</a>");
+    assert_eq!(texts(&f), ["NormalNone:α\n\nβ\rγ", "NormalNone:link"]);
+    let FBlock::Para(p) = &f.blocks[1] else { panic!() };
+    assert!(matches!(p.inlines.first(), Some(Inline::Text(_, f)) if f.link.as_deref() == Some("https://example.test/a\nb\nc\rd")));
+}
+
+#[test]
 fn css_preformatted_paragraphs_keep_edge_spaces() {
     // #439: `white-space:pre` keeps leading and trailing spaces like `<pre>`; normal
     // paragraphs still collapse.
@@ -186,6 +206,21 @@ fn entities() {
     assert_eq!(unescape("a &lt;b&gt; &#65;&#x42; &bogus; &"), "a <b> AB &bogus; &");
     assert_eq!(unescape("&minus; &COPY; &EURO; &TRADE; &frac12; &frac34;"), "− © € ™ ½ ¾");
     assert_eq!(unescape("&theta; &lambda; &Delta; &nabla; &sum; &radic; &ne; &le; &ge; &hearts;"), "θ λ Δ ∇ ∑ √ ≠ ≤ ≥ ♥");
+}
+
+/// Browsers decode numeric and legacy named references without their `;` in text,
+/// but keep `&name=` and `&nameX` intact inside attribute values (query strings).
+#[test]
+fn references_without_semicolon() {
+    assert_eq!(unescape("&copy 2024 Acme"), "© 2024 Acme");
+    assert_eq!(unescape("&#169 2024 Acme"), "© 2024 Acme");
+    assert_eq!(unescape("&#xA9 2024 &amp &lt"), "© 2024 & <");
+    assert_eq!(unescape("&bogus &# &#x &"), "&bogus &# &#x &");
+    assert_eq!(unescape("&nbsp;x"), "\u{00A0}x");
+    let f = parse("<p><a href=\"/q?a=1&copy=2&reg2=3&amp;b=&lt\">l</a> &copy 2024</p>");
+    let FBlock::Para(p) = &f.blocks[0] else { panic!() };
+    assert!(p.inlines.iter().any(|i| matches!(i, Inline::Text(t, f) if t == "l" && f.link.as_deref() == Some("/q?a=1&copy=2&reg2=3&b=<"))));
+    assert!(p.text().ends_with("© 2024"));
 }
 
 #[test]
@@ -473,4 +508,13 @@ fn many_formatted_leading_breaks_trim_quickly() {
     assert!(t.elapsed() < std::time::Duration::from_secs(20), "{:?}", t.elapsed());
     let texts: Vec<String> = f.blocks.iter().filter_map(|b| if let FBlock::Para(p) = b { Some(p.text()) } else { None }).collect();
     assert_eq!(texts, ["x"]);
+}
+
+#[test]
+fn trailing_space_survives_round_trip() {
+    for text in ["Total: ", "a b "] {
+        let doc = Document::from_text(text);
+        let back = import(&export(&doc));
+        assert_eq!(back.plain_text(Default::default()).replace('\u{a0}', " "), text);
+    }
 }
