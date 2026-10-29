@@ -4,8 +4,6 @@ name: Test portable (fork only)
 # way the release workflow's Windows job does (packaging/windows/package.ps1), without signing,
 # the release environment or a draft release. Not meant for upstream.
 on:
-  push:
-    branches: ['test/**']
   workflow_dispatch:
 
 permissions:
