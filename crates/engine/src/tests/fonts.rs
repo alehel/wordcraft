@@ -438,3 +438,34 @@ fn only_characters_that_draw_count() {
         assert!(!draws_something(c), "{c:?}");
     }
 }
+
+#[test]
+fn a_blank_font_name_is_not_a_missing_font() {
+    // A file's `w:ascii=" "`: the text is drawn in a substitute, but there's no font to name.
+    assert!(missing_in(doc_of(vec![para_in("Text", " "), para_in("More", "\t")])).is_empty());
+}
+
+#[test]
+fn a_padded_name_is_judged_by_the_face_its_text_is_drawn_in() {
+    // Layout looks "Arial " up spaces and all, so its text is in a substitute even where Arial is
+    // installed; one of Arial's twins (Helvetica on a Mac) measures like it.
+    let m = missing_in(doc_of(vec![para_in("Text", "Arial ")]));
+    let Some(arial) = m.iter().find(|f| f.font == "Arial") else { return };
+    let drawn = arial.shown_as.first().expect("drawn in a face");
+    assert_eq!(arial.metric_compatible, wordcraft_fonts::word::metric_compatible("Arial", drawn), "{arial:?}");
+}
+
+#[test]
+fn an_east_asian_font_is_shown_as_the_face_its_text_is_drawn_in() {
+    // MS Mincho is roman in many font tables, but Cambria is the run's font's substitute: an
+    // East Asian font's text goes to the run's font or a fallback face, as the list says.
+    const MINCHO: &str = "Wordcraft Mincho Gone";
+    let props = wordcraft_doc::CharProps { font: Some("JetBrains Mono".into()), font_ea: Some(MINCHO.into()), ..Default::default() };
+    let mut doc = doc_of(vec![wordcraft_doc::Paragraph::with_text("日", props)]);
+    doc.settings.roman_fonts = vec![MINCHO.into()];
+    let shown = crate::cmd::font::east_asian_shown_as(&doc, MINCHO, "JetBrains Mono").expect("not installed");
+    let m = missing_in(doc.clone());
+    assert_eq!(m.iter().map(|f| f.font.as_str()).collect::<Vec<_>>(), [MINCHO], "{m:?}");
+    assert_eq!(m[0].shown_as, [shown], "{m:?}");
+    assert!(crate::cmd::font::east_asian_shown_as(&doc, "JetBrains Mono", "JetBrains Mono").is_none(), "installed");
+}

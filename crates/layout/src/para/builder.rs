@@ -168,9 +168,10 @@ impl<'a> Builder<'a> {
     /// Record that text asking for `font` (not installed) was drawn in `drawn`, once per pair;
     /// at most 64 pairs a paragraph, so a hostile file can't grow the list without bound. Symbol
     /// fonts (Symbol, Wingdings…) are drawn as their Unicode equivalents on purpose: not worth
-    /// reporting (most Word bullets would be).
+    /// reporting (most Word bullets would be). A blank name (a file's `w:ascii=" "`) names no font
+    /// to report.
     fn note_substituted(&mut self, font: &str, drawn: FaceRef) {
-        if wordcraft_doc::symbol_fonts::is_symbol_font(font) {
+        if font.trim().is_empty() || wordcraft_doc::symbol_fonts::is_symbol_font(font) {
             return;
         }
         let font = reported_font_name(font);

@@ -144,6 +144,12 @@ pub fn shown_as(doc: &Document, font: &str) -> Option<String> {
     wordcraft_layout::para::substitute_face(doc, font).map(|f| f.get().family.clone())
 }
 
+/// The family Chinese, Japanese and Korean text is drawn in when its East Asian font `font_ea`
+/// isn't installed (None when it is), the run's font being `font`, as layout picks it for `doc`.
+pub fn east_asian_shown_as(doc: &Document, font_ea: &str, font: &str) -> Option<String> {
+    wordcraft_layout::para::east_asian_substitute_face(doc, font_ea, font).map(|f| f.get().family.clone())
+}
+
 /// Whether text in `font` drawn in `substitute` is worth a warning: the substitute measures
 /// differently, so line breaks can move, and the font isn't a symbol font (drawn as its
 /// Unicode equivalents on purpose, which layout leaves out of [`missing_fonts`] too). Decides
@@ -159,13 +165,15 @@ pub fn warns(font: &str, substitute: &str) -> bool {
 pub fn missing_fonts(doc: &Document, layout: &DocLayout) -> Vec<MissingFont> {
     // By key: in name order, case variants merged.
     let mut out: std::collections::BTreeMap<String, MissingFont> = std::collections::BTreeMap::new();
-    for (font, face) in layout.substituted_fonts() {
+    for (recorded, face) in layout.substituted_fonts() {
         let family = face.get().family.clone();
-        let font = shown_name(&font);
+        let font = shown_name(&recorded);
         let m = out.entry(font_key(font)).or_insert_with(|| MissingFont {
             font: font.to_string(),
             shown_as: Vec::new(),
-            metric_compatible: shown_as(doc, font).is_some_and(|s| !warns(font, &s)),
+            // Judged by the name layout looked up, spaces and all: "Arial " isn't Arial to it, so
+            // its text is in a substitute even where Arial is installed.
+            metric_compatible: shown_as(doc, &recorded).is_some_and(|s| !warns(font, &s)),
         });
         if !m.shown_as.contains(&family) {
             m.shown_as.push(family);

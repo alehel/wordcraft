@@ -632,11 +632,7 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 let missing = app.cached_missing_fonts(&l).0;
                 let count = missing.iter().filter(|f| !f.metric_compatible).count();
                 if count > 0 {
-                    let label = if count == 1 {
-                        tl!("1 font not installed").to_string()
-                    } else {
-                        crate::i18n::fmt(tl!("{count} fonts not installed"), &[("count", &count.to_string())])
-                    };
+                    let label = crate::i18n::tn(count as u64, "{n} font not installed", "{n} fonts not installed");
                     let resp = st_icon(ui, Some("fontMissing"), &label).on_hover_text(tl!("Shown in substitute fonts. Click for details."));
                     egui::Popup::menu(&resp).show(|ui| {
                         ui.set_min_width(260.0);
@@ -647,7 +643,7 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                             ui.label(format!("{} → {}", f.font, f.shown_as.join(", ")));
                         }
                         if count > SHOWN {
-                            ui.label(crate::i18n::fmt(tl!("…and {count} more"), &[("count", &(count - SHOWN).to_string())]));
+                            ui.label(crate::i18n::tn((count - SHOWN) as u64, "…and {n} more", "…and {n} more"));
                         }
                         ui.separator();
                         if ui.button(tl!("Add Font…")).clicked() {
@@ -790,6 +786,9 @@ fn small_icon(ui: &mut Ui, icon: &str, tip: &str) -> bool {
 pub type MissingFontsCache =
     (std::sync::Arc<Vec<wordcraft_engine::cmd::font::MissingFont>>, std::sync::Arc<std::collections::HashMap<String, String>>);
 
+/// [`WordApp::missing_fonts`]: the layout the list was read from, and the list.
+pub type MissingFontsMemo = (std::sync::Weak<wordcraft_layout::DocLayout>, MissingFontsCache);
+
 impl WordApp {
     /// [`wordcraft_engine::cmd::font::missing_fonts`] for `layout`, and the font box's warnings
     /// by [`font_key`](wordcraft_engine::cmd::font::font_key) (the layout-changing ones, with the
@@ -814,6 +813,19 @@ impl WordApp {
     /// uses gets none. Where no letters show the font yet (the caret in an empty paragraph, or
     /// about to type in a font just picked), the substitute layout will use is named instead.
     pub fn font_box_warning(&mut self, font: &str) -> Option<String> {
+        self.font_box_warning_or(font, |doc| wordcraft_engine::cmd::font::shown_as(doc, font))
+    }
+
+    /// [`WordApp::font_box_warning`] for an East Asian font box (`font_ea`, the run's font being
+    /// `font`): where no letters show it yet, the face layout draws such text in when the font
+    /// is missing, the run's font or a fallback face.
+    pub fn east_asian_font_box_warning(&mut self, font_ea: &str, font: &str) -> Option<String> {
+        self.font_box_warning_or(font_ea, |doc| wordcraft_engine::cmd::font::east_asian_shown_as(doc, font_ea, font))
+    }
+
+    /// The font box's warning for `font`: from the status bar's list, else, while no letters
+    /// show it, the family `unshown` says its text will be drawn in.
+    fn font_box_warning_or(&mut self, font: &str, unshown: impl FnOnce(&wordcraft_doc::Document) -> Option<String>) -> Option<String> {
         let layout = self.session.layout();
         let key = wordcraft_engine::cmd::font::font_key(font);
         if let Some(w) = self.cached_missing_fonts(&layout).1.get(&key) {
@@ -821,7 +833,7 @@ impl WordApp {
         }
         let nothing_shown = self.session.sel.is_collapsed()
             && self.session.doc.para_at(&self.session.sel.focus).is_none_or(|p| !p.text.chars().any(wordcraft_layout::para::draws_something));
-        let shown = nothing_shown.then(|| wordcraft_engine::cmd::font::shown_as(&self.session.doc, font)).flatten()?;
+        let shown = nothing_shown.then(|| unshown(&self.session.doc)).flatten()?;
         wordcraft_engine::cmd::font::warns(font, &shown).then_some(shown)
     }
 

@@ -277,6 +277,10 @@ fn combo_impl(ui: &mut Ui, options: ComboOptions<'_>) -> Option<String> {
         if !tip.is_empty() {
             resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, ui.is_enabled(), tip));
         }
+        // The warning mark is drawn, and its note is a hover hint: a screen reader reads it here.
+        if let Some(note) = notes.first() {
+            ui.ctx().accesskit_node_builder(resp.id, |n| n.set_description(note.as_str()));
+        }
         keytip_badge(ui, resp.rect, "combo", id);
         focused = resp.has_focus();
         let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));

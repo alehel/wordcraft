@@ -178,6 +178,25 @@ pub fn substitute_face(doc: &Document, font: &str) -> Option<FaceRef> {
     (r.substituted || family != font).then_some(r.face)
 }
 
+/// The face Chinese, Japanese and Korean text is drawn in when its East Asian font (`w:eastAsia`)
+/// `font_ea` isn't installed and the run's font is `font`; `None` when `font_ea` is installed. As
+/// layout draws it: an East Asian font is looked up by name alone (the roman-font rule of
+/// [`substitute_face`] is for the run's font), and the text goes to the run's font when it has the
+/// characters, else to the first fallback face that does.
+pub fn east_asian_substitute_face(doc: &Document, font_ea: &str, font: &str) -> Option<FaceRef> {
+    if font_ea.trim().is_empty() || !wordcraft_fonts::word::resolve(font_ea, false, false).substituted {
+        return None;
+    }
+    // 日: one ideograph stands for the text, which isn't known yet.
+    const IDEOGRAPH: char = '\u{65E5}';
+    let primary = wordcraft_fonts::word::resolve(lookup_family(doc, font), false, false).face;
+    if primary.covers(IDEOGRAPH) {
+        return Some(primary);
+    }
+    let fallback = wordcraft_fonts::FontDb::global().fallback_for_run(&[IDEOGRAPH], primary.id(), false, false);
+    Some(fallback.map_or(primary, |f| FaceRef::of(&f)))
+}
+
 /// `font` as [`ParaLayout::substituted`](super::ParaLayout::substituted) records it: a hostile
 /// file's font name can be megabytes long, so the first 256 characters. Look names up through
 /// this to match it.

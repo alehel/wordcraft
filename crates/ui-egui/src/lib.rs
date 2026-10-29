@@ -561,7 +561,7 @@ pub struct WordApp {
     pub autosave: bool,
     /// The document's fonts that aren't installed, for the status bar and the font box, and the
     /// layout they were read from.
-    pub missing_fonts: (std::sync::Weak<wordcraft_layout::DocLayout>, crate::chrome::MissingFontsCache),
+    pub missing_fonts: crate::chrome::MissingFontsMemo,
     pub word_count: (u64, usize),
     last_autosave: f64,
     /// The tab shown before the Equation tab came up (restored when editing ends).
