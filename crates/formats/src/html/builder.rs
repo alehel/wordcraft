@@ -336,10 +336,11 @@ impl<'r> Builder<'r> {
     }
 
     pub(super) fn text(&mut self, t: &str) {
+        if let Some(title) = &mut self.title {
+            title.push_str(t);
+            return;
+        }
         if self.in_head() {
-            if let Some(title) = &mut self.title {
-                title.push_str(t);
-            }
             return;
         }
         if t.is_empty() {
