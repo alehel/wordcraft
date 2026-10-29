@@ -154,7 +154,7 @@ pub fn font_combo_with_recent_hint(ui: &mut Ui, options: FontComboOptions<'_>) -
 fn missing_font_tip(font: &str, shown_as: &str) -> String {
     crate::i18n::fmt(
         tl!(
-            "{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. Add Font… installs it."
+            "{font} isn't installed on this computer, so its text is shown in {shown}. Line breaks and page count can differ from where the document was made. If you have the font file, add it with Add Font… at the end of this list."
         ),
         &[("font", font), ("shown", shown_as)],
     )
