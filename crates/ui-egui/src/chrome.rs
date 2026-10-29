@@ -809,9 +809,9 @@ impl WordApp {
 
     /// The font box's warning for `font` (a stored name): the faces its text is drawn in
     /// instead, when the status bar lists it as missing and changing the layout. Read from the
-    /// same list as the status bar, so the two never disagree; a name being typed that no text
-    /// uses gets none. Where no letters show the font yet (the caret in an empty paragraph, or
-    /// about to type in a font just picked), the substitute layout will use is named instead.
+    /// same list as the status bar, so the two never disagree. At a collapsed caret, where the
+    /// box shows the font typing will use (an empty paragraph's, or one just picked at the end
+    /// of a line), the substitute layout will draw it in is named instead.
     pub fn font_box_warning(&mut self, font: &str) -> Option<String> {
         self.font_box_warning_or(font, |doc| wordcraft_engine::cmd::font::shown_as(doc, font))
     }
@@ -831,9 +831,10 @@ impl WordApp {
         if let Some(w) = self.cached_missing_fonts(&layout).1.get(&key) {
             return Some(w.clone());
         }
-        let nothing_shown = self.session.sel.is_collapsed()
-            && self.session.doc.para_at(&self.session.sel.focus).is_none_or(|p| !p.text.chars().any(wordcraft_layout::para::draws_something));
-        let shown = nothing_shown.then(|| unshown(&self.session.doc)).flatten()?;
+        // At a collapsed caret the box shows the font typing will use: no shown text is in it
+        // (else the list has it), so the next letter is drawn in `unshown`'s family. A selection's
+        // font is the selected text's, which the list already covers.
+        let shown = self.session.sel.is_collapsed().then(|| unshown(&self.session.doc)).flatten()?;
         wordcraft_engine::cmd::font::warns(font, &shown).then_some(shown)
     }
 

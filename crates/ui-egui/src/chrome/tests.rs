@@ -322,7 +322,15 @@ fn the_font_box_warns_where_the_status_bar_does_and_before_typing() {
     let (list, _) = a.cached_missing_fonts(&l);
     assert!(list.iter().any(|f| f.font == missing), "{list:?}");
     assert!(a.font_box_warning(missing).is_some());
-    // A name no text uses, typed in a dialog over a paragraph with text: no warning.
+    // A missing font just picked at the end of text in an installed one: the next letter will be
+    // drawn in a substitute, so the box warns before it is typed.
+    a.session.run("select.all", &json!({})).unwrap();
+    a.session.run("format.font", &json!({"name": "JetBrains Mono"})).unwrap();
+    a.session.run("caret.docEnd", &json!({})).unwrap();
+    a.session.run("format.font", &json!({"name": "Wordcraft Just Picked"})).unwrap();
+    assert!(a.font_box_warning("Wordcraft Just Picked").is_some(), "picked at the caret");
+    // Over a selection the box shows the selected text's font, which the list decides.
+    a.session.run("select.all", &json!({})).unwrap();
     assert!(a.font_box_warning("Wordcraft Half Typed").is_none());
 }
 

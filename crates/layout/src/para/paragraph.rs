@@ -688,6 +688,8 @@ fn collapse(pl: &mut ParaLayout) {
     pl.rp.space_before = 0.0;
     pl.rp.space_after = 0.0;
     pl.label = None;
+    // It draws nothing, so no font it asks for is shown in another (its label was shaped).
+    pl.substituted.clear();
     // Its shading and borders would be drawn across the page at no height.
     pl.rp.shading = None;
     pl.rp.borders = None;
