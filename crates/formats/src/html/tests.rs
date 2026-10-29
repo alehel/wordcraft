@@ -474,3 +474,12 @@ fn many_formatted_leading_breaks_trim_quickly() {
     let texts: Vec<String> = f.blocks.iter().filter_map(|b| if let FBlock::Para(p) = b { Some(p.text()) } else { None }).collect();
     assert_eq!(texts, ["x"]);
 }
+
+#[test]
+fn trailing_space_survives_round_trip() {
+    for text in ["Total: ", "a b "] {
+        let doc = Document::from_text(text);
+        let back = import(&export(&doc));
+        assert_eq!(back.plain_text(Default::default()).replace('\u{a0}', " "), text);
+    }
+}
