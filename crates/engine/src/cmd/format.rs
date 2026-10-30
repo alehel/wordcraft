@@ -867,8 +867,9 @@ pub fn state(s: &Session) -> Value {
     let style = s.doc.para_at(&at).and_then(|p| p.props.style.clone()).unwrap_or_else(|| "Normal".into());
     let style_name = s.doc.styles.get(&style).map(|st| st.name.clone()).unwrap_or(style.clone());
     let font = same(&|r| json!(r.font));
-    // The family drawn instead when the font isn't installed (`font.missing` says which fonts
-    // the shown text is drawn in, and which of them change the layout).
+    // The font's substitute when it isn't installed: the face its text is drawn in, apart from
+    // characters the substitute lacks. `font.missing` lists every face the shown text is drawn
+    // in, fallback faces too, and which fonts change the layout.
     let shown_as = font.as_str().and_then(|f| crate::cmd::font::shown_as(&s.doc, f));
     json!({
         "font": font,
