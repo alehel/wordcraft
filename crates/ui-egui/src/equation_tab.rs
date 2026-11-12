@@ -212,6 +212,12 @@ pub fn builtin_menu(ui: &mut Ui, app: &mut WordApp) {
     }
 }
 
+/// The Equation button's hint with the key in effect, written as the platform writes it (`⌥=` on
+/// macOS), in place of the `Alt+=` the translated text names; no key, no parenthesis.
+fn equation_hint(text: &str, key: &str) -> String {
+    if key.is_empty() { text.replace(" (Alt+=)", "").replace("(Alt+=)", "") } else { text.replace("Alt+=", key) }
+}
+
 /// Insert › Symbols › Equation: a split button (insert a new equation, or pick a ready-made one).
 pub fn insert_button(ui: &mut Ui, app: &mut WordApp) {
     let t = Tokens::get(ui.ctx());
@@ -235,7 +241,7 @@ pub fn insert_button(ui: &mut Ui, app: &mut WordApp) {
         t.accent,
     );
     crate::widgets::label_line(ui, r.center().x, r.min.y + BIG_LABEL_Y, label, regular(11.5), t.text, true);
-    if rt.on_hover_text(tl!("Insert a new equation (Alt+=)")).clicked() {
+    if rt.on_hover_text(equation_hint(tl!("Insert a new equation (Alt+=)"), &crate::widgets::shortcut_text(app, "insert.equation"))).clicked() {
         let _ = app.run("insert.equation", json!({}));
         app.canvas.want_focus = true;
     }
@@ -464,6 +470,20 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             }
         });
     });
+}
+
+#[cfg(test)]
+mod hint_tests {
+    use super::equation_hint;
+
+    /// The hint named Alt+= on every platform, and after the key was reassigned.
+    #[test]
+    fn equation_hint_names_the_key_in_effect() {
+        assert_eq!(equation_hint("Insert a new equation (Alt+=)", "⌥="), "Insert a new equation (⌥=)");
+        assert_eq!(equation_hint("Insert a new equation (Alt+=)", "Ctrl+E"), "Insert a new equation (Ctrl+E)");
+        assert_eq!(equation_hint("Eine neue Formel einfügen (Alt+=)", "Alt+="), "Eine neue Formel einfügen (Alt+=)");
+        assert_eq!(equation_hint("Insert a new equation (Alt+=)", ""), "Insert a new equation");
+    }
 }
 
 #[cfg(test)]

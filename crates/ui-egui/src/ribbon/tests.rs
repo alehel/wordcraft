@@ -1092,3 +1092,27 @@ fn shape_and_chart_formats_leave_out_of_range_sizes_alone() {
     assert_eq!(before.0, Some((20.0, 2500.0)));
     assert_eq!(shown(a), before, "Chart Design shown, the chart untouched");
 }
+
+/// Home › Paste's hint names the key as this platform writes it (Ctrl+V on Windows and Linux,
+/// ⌘V on macOS); it showed ⌘V everywhere.
+#[test]
+fn paste_hint_names_the_platform_shortcut() {
+    use egui_kittest::kittest::Queryable;
+    let a = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Lanterns")), crate::Services::default());
+    let mut h = egui_kittest::Harness::builder()
+        .with_size(vec2(900.0, 300.0))
+        .with_context_setup(|ctx| {
+            ctx.set_fonts(crate::theme::font_definitions(false, false));
+            ctx.global_style_mut(|s| s.interaction.tooltip_delay = 0.0);
+        })
+        .build_ui_state(|ui, app: &mut WordApp| super::home::home(app, ui), a);
+    h.run_steps(2);
+    h.get_by_label("Paste").hover();
+    h.run_steps(4);
+    let want = format!("Paste ({})", crate::widgets::key_text("Mod+V"));
+    assert!(h.query_by_label(&want).is_some(), "no hint reads {want:?}");
+    if !cfg!(target_os = "macos") {
+        assert_eq!(want, "Paste (Ctrl+V)");
+        assert!(h.query_all_by_label_contains("⌘").next().is_none(), "a macOS key on another platform");
+    }
+}
